@@ -1,0 +1,83 @@
+{% extends "core/base.html" %}
+{% block title %}Student Dashboard{% endblock %}
+{% block content %}
+
+{% if profile %}
+<div class="page-header">
+  <h1>👋 Hello, {{ user.get_full_name|default:user.username }}</h1>
+  <p>{{ user.school.name }} — {{ profile.class_level.name|default:"" }} {{ profile.stream.name|default:"" }}</p>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">Admission No.</div>
+    <div class="value" style="font-size:1.2rem;padding-top:.3rem;">{{ profile.admission_number }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Subjects Taken</div>
+    <div class="value">{{ mark_count }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Your Average</div>
+    <div class="value">{% if avg_score %}{{ avg_score|floatformat:1 }}{% else %}—{% endif %}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Best Subject</div>
+    <div class="value" style="font-size:.95rem;padding-top:.4rem;">
+      {% if best_subject %}{{ best_subject.subject__name }}{% else %}—{% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Term averages -->
+{% if term_avgs %}
+<div class="card">
+  <div class="card-title">Performance by Term</div>
+  <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+    {% for t in term_avgs %}
+    <div style="flex:1;min-width:140px;">
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem;">{{ t.term }}</div>
+      <div style="font-size:1.6rem;font-weight:700;color:{% if t.avg >= 50 %}var(--green){% else %}var(--red){% endif %};">
+        {{ t.avg|floatformat:1 }}
+      </div>
+      <div class="progress" style="margin-top:.5rem;">
+        <div class="progress-bar" style="width:{{ t.avg }}%;background:{% if t.avg >= 50 %}var(--green){% else %}var(--red){% endif %};"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Marks table -->
+<div class="card">
+  <div class="card-title">My Results</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Subject</th><th>Term</th><th>Score</th><th>Grade</th></tr></thead>
+      <tbody>
+        {% for m in marks %}
+        <tr>
+          <td><strong>{{ m.subject.name }}</strong></td>
+          <td>{{ m.term }}</td>
+          <td>{{ m.score }}</td>
+          <td>
+            {% if m.score >= 80 %}<span class="badge badge-green">A</span>
+            {% elif m.score >= 65 %}<span class="badge badge-blue">B</span>
+            {% elif m.score >= 50 %}<span class="badge badge-yellow">C</span>
+            {% else %}<span class="badge badge-red">F</span>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" style="color:var(--muted);text-align:center;padding:1.5rem;">No marks entered yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+<div class="alert alert-warning">No student profile found. Please contact your administrator.</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,2 @@
+django>=5.0
+django-import-export>=3.0

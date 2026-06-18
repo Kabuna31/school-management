@@ -1,0 +1,54 @@
+{% extends "core/base.html" %}
+{% block title %}Edit Mark{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>✏️ Edit Mark</h1>
+  <p>{{ request.user.school.name }}</p>
+</div>
+
+<div class="card" style="max-width:480px;">
+  <div class="card-title">Mark Details</div>
+
+  <!-- Read-only info -->
+  <table style="margin-bottom:1.5rem;font-size:.9rem;width:100%;">
+    <tr><td style="color:var(--muted);padding:.4rem 0;width:130px;">Student</td>
+        <td><strong>{{ mark.student.user.get_full_name }}</strong></td></tr>
+    <tr><td style="color:var(--muted);padding:.4rem 0;">Admission No.</td>
+        <td>{{ mark.student.admission_number }}</td></tr>
+    <tr><td style="color:var(--muted);padding:.4rem 0;">Class</td>
+        <td>{{ mark.student.class_level.name|default:"—" }} — {{ mark.student.stream.name|default:"—" }}</td></tr>
+    <tr><td style="color:var(--muted);padding:.4rem 0;">Subject</td>
+        <td>{{ mark.subject.name }}</td></tr>
+    <tr><td style="color:var(--muted);padding:.4rem 0;">Term</td>
+        <td><span class="badge badge-blue">{{ mark.term }}</span></td></tr>
+    <tr><td style="color:var(--muted);padding:.4rem 0;">Current Score</td>
+        <td>
+          <strong>{{ mark.score }}</strong>
+          {% if mark.score >= 80 %}<span class="badge badge-green" style="margin-left:.5rem;">A</span>
+          {% elif mark.score >= 65 %}<span class="badge badge-blue" style="margin-left:.5rem;">B</span>
+          {% elif mark.score >= 50 %}<span class="badge badge-yellow" style="margin-left:.5rem;">C</span>
+          {% else %}<span class="badge badge-red" style="margin-left:.5rem;">F</span>{% endif %}
+        </td></tr>
+    <tr><td style="color:var(--muted);padding:.4rem 0;">Teacher</td>
+        <td>{{ mark.teacher.user.get_full_name|default:"—" }}</td></tr>
+  </table>
+
+  <!-- Edit form -->
+  <form method="post" action="{% url 'core:school_mark_edit' mark.pk %}">
+    {% csrf_token %}
+    <div class="form-group" style="margin-bottom:1rem;">
+      <label for="score">New Score (0 – 100)</label>
+      <input type="number" id="score" name="score"
+        min="0" max="100" step="0.5"
+        value="{{ mark.score }}"
+        style="max-width:160px;"
+        required>
+    </div>
+    <div style="display:flex;gap:.75rem;">
+      <button type="submit" class="btn btn-primary">💾 Save</button>
+      <a href="{% url 'core:school_marks' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

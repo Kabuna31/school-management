@@ -1,0 +1,160 @@
+{% extends "core/base.html" %}
+{% block title %}Enter Marks{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Enter Marks</h1>
+  <p>Select a class, stream, subject, and term, then fill in scores.</p>
+</div>
+
+{% if success == 'true' %}
+  <div class="alert alert-success">✅ All marks saved successfully.</div>
+{% elif success == 'partial' %}
+  <div class="alert alert-partial">⚠️ Marks saved, but some scores were skipped due to invalid values.</div>
+{% endif %}
+
+<!-- Filter form -->
+<div class="card">
+  <div class="card-title">Filter Students</div>
+  <form method="get" action="{% url 'core:teacher_mark_entry' %}">
+    <div class="form-row">
+
+      <div class="form-group">
+        <label for="class_level">Class</label>
+        <select name="class_level" id="class_level" required>
+          <option value="">— Select class —</option>
+          {% for cls in classes %}
+            <option value="{{ cls.pk }}"
+              {% if selected_class == cls.pk|stringformat:"s" %}selected{% endif %}>
+              {{ cls.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="stream">Stream</label>
+        <select name="stream" id="stream" required>
+          <option value="">— Select stream —</option>
+          {% for stream in streams %}
+            <option value="{{ stream.pk }}"
+              {% if selected_stream == stream.pk|stringformat:"s" %}selected{% endif %}>
+              {{ stream.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="subject">Subject</label>
+        <select name="subject" id="subject">
+          <option value="">— Select subject —</option>
+          {% for subject in subjects %}
+            <option value="{{ subject.pk }}"
+              {% if selected_subject == subject.pk|stringformat:"s" %}selected{% endif %}>
+              {{ subject.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="term">Term</label>
+        <select name="term" id="term">
+          <option value="">— Select term —</option>
+          {% for term in terms %}
+            <option value="{{ term }}"
+              {% if selected_term == term %}selected{% endif %}>
+              {{ term }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+    </div>
+    <button type="submit" class="btn btn-secondary">🔍 Load Students</button>
+  </form>
+</div>
+
+<!-- Mark entry table -->
+{% if students %}
+  <div class="card">
+    <div class="card-title">
+      Students
+      {% if selected_term %}&mdash; {{ selected_term }}{% endif %}
+      <span class="badge badge-gray" style="margin-left:.5rem;">
+        {{ students|length }} student{{ students|length|pluralize }}
+      </span>
+    </div>
+
+    {% if not selected_subject or not selected_term %}
+      <div class="alert alert-partial" style="margin-bottom:1rem;">
+        ℹ️ Select a subject and term above to enter or edit scores.
+      </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'core:teacher_mark_entry' %}">
+      {% csrf_token %}
+      <input type="hidden" name="class_level" value="{{ selected_class }}">
+      <input type="hidden" name="stream"      value="{{ selected_stream }}">
+      <input type="hidden" name="subject"     value="{{ selected_subject }}">
+      <input type="hidden" name="term"        value="{{ selected_term }}">
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Admission No.</th>
+              <th>Score <span style="font-weight:400;font-size:.75rem;">(0 – 100)</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student in students %}
+            <tr>
+              <td style="color:var(--muted);">{{ forloop.counter }}</td>
+              <td>{{ student.user.get_full_name|default:student.user.username }}</td>
+              <td><span class="badge badge-gray">{{ student.admission_number }}</span></td>
+              <td>
+                {% if selected_subject and selected_term %}
+                  <input
+                    class="score-input"
+                    type="number"
+                    name="student_{{ student.pk }}"
+                    min="0" max="100" step="0.5"
+                    placeholder="—"
+                    value="{% if existing_marks %}{{ existing_marks|default_if_none:'' }}{% endif %}"
+                  >
+                {% else %}
+                  <span style="color:var(--muted); font-size:.85rem;">select subject &amp; term</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" style="color:var(--muted); text-align:center; padding:1.5rem;">
+                No students found in this class and stream.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if selected_subject and selected_term and students %}
+        <div style="margin-top:1.25rem; display:flex; gap:.75rem; align-items:center;">
+          <button type="submit" class="btn btn-primary">💾 Save Marks</button>
+          <a href="{% url 'core:teacher_mark_entry' %}" class="btn btn-secondary">✕ Clear</a>
+        </div>
+      {% endif %}
+    </form>
+  </div>
+
+{% elif selected_class and selected_stream %}
+  <div class="card">
+    <p style="color:var(--muted);">No students found for the selected class and stream.</p>
+  </div>
+{% endif %}
+
+{% endblock %}

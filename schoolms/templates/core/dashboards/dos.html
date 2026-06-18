@@ -1,0 +1,96 @@
+{% extends "core/base.html" %}
+{% block title %}DOS Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>📚 Director of Studies</h1>
+  <p>{{ school.name }} — Academic performance overview.</p>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="label">Students</div><div class="value">{{ student_count }}</div></div>
+  <div class="stat-card"><div class="label">Classes</div><div class="value">{{ class_count }}</div></div>
+  <div class="stat-card"><div class="label">Marks Entered</div><div class="value">{{ mark_count }}</div></div>
+  <div class="stat-card">
+    <div class="label">School Average</div>
+    <div class="value">{% if avg_score %}{{ avg_score|floatformat:1 }}{% else %}—{% endif %}</div>
+  </div>
+</div>
+
+<div class="quick-actions">
+  <a href="{% url 'core:teacher_mark_entry' %}" class="btn btn-primary">✏️ Enter Marks</a>
+  <a href="{% url 'admin:core_mark_changelist' %}" class="btn btn-primary">📋 View All Marks</a>
+  <a href="{% url 'admin:core_studentprofile_changelist' %}" class="btn btn-primary">👥 Students</a>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Classes & Performance</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Class</th><th>Students</th><th>Avg Score</th></tr></thead>
+        <tbody>
+          {% for cls in classes %}
+          <tr>
+            <td><strong>{{ cls.name }}</strong></td>
+            <td>{{ cls.students }}</td>
+            <td>
+              {% if cls.avg_score %}
+                <span class="badge {% if cls.avg_score >= 50 %}badge-green{% else %}badge-red{% endif %}">
+                  {{ cls.avg_score|floatformat:1 }}
+                </span>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Subject Rankings</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Subject</th><th>Records</th><th>Avg</th></tr></thead>
+        <tbody>
+          {% for sub in subject_avgs %}
+          <tr>
+            <td>{{ sub.name }}</td>
+            <td>{{ sub.total }}</td>
+            <td>
+              {% if sub.avg %}
+              <span class="badge {% if sub.avg >= 50 %}badge-green{% else %}badge-red{% endif %}">{{ sub.avg|floatformat:1 }}</span>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">Recent Mark Entries <a href="{% url 'admin:core_mark_changelist' %}">View all</a></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Student</th><th>Subject</th><th>Term</th><th>Score</th><th>Teacher</th></tr></thead>
+      <tbody>
+        {% for m in recent_marks %}
+        <tr>
+          <td>{{ m.student.user.get_full_name }}</td>
+          <td>{{ m.subject.name }}</td>
+          <td><span class="badge badge-blue">{{ m.term }}</span></td>
+          <td>{% if m.score >= 50 %}<span class="badge badge-green">{{ m.score }}</span>{% else %}<span class="badge badge-red">{{ m.score }}</span>{% endif %}</td>
+          <td>{{ m.teacher.user.get_full_name|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:1.5rem;">No marks yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

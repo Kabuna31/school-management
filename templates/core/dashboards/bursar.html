@@ -1,0 +1,44 @@
+{% extends "core/base.html" %}
+{% block title %}Bursar Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>💰 Bursar Dashboard</h1>
+  <p>{{ school.name }} — Student & staff registry.</p>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="label">Students</div><div class="value">{{ student_count }}</div><div class="sub">enrolled</div></div>
+  <div class="stat-card"><div class="label">Staff</div><div class="value">{{ staff_count }}</div><div class="sub">employees</div></div>
+  <div class="stat-card"><div class="label">Classes</div><div class="value">{{ class_count }}</div></div>
+</div>
+
+<div class="card">
+  <div class="card-title">Students per Class</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Class</th><th>Students</th><th>Class Teacher</th></tr></thead>
+      <tbody>
+        {% for cls in classes %}
+        <tr>
+          <td><strong>{{ cls.name }}</strong></td>
+          <td>{{ cls.students }}</td>
+          <td>{{ cls.class_teacher.user.get_full_name|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" style="color:var(--muted);text-align:center;padding:1.5rem;">No classes yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">📢 Announcements</div>
+  <div class="announcement">
+    <strong>Fee collection reminders</strong> — Contact admin to enable full fee management module.
+    <div class="date">{% now "N j, Y" %}</div>
+  </div>
+</div>
+
+{% endblock %}

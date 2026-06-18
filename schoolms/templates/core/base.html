@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}SchoolMS{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --brand: #1a56db; --brand-dark: #1040b0;
+      --bg: #f3f4f6; --surface: #fff;
+      --border: #e5e7eb; --text: #111827; --muted: #6b7280;
+      --radius: 6px; --shadow: 0 1px 3px rgba(0,0,0,.10);
+      --green: #16a34a; --red: #dc2626; --yellow: #d97706; --purple: #7c3aed;
+    }
+    body { font-family: system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; flex-direction:column; }
+
+    /* Nav */
+    nav { background:var(--brand); color:#fff; padding:0 1.5rem; display:flex; align-items:center; justify-content:space-between; height:56px; box-shadow:0 2px 4px rgba(0,0,0,.15); }
+    .brand { font-weight:700; font-size:1.1rem; }
+    .nav-links { display:flex; gap:1.1rem; align-items:center; }
+    .nav-links a { color:rgba(255,255,255,.88); text-decoration:none; font-size:.88rem; }
+    .nav-links a:hover { color:#fff; }
+    .nav-links .role-tag { background:rgba(255,255,255,.18); border-radius:99px; padding:.2rem .7rem; font-size:.75rem; font-weight:600; }
+    .btn-logout { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.3); color:#fff; padding:.3rem .85rem; border-radius:var(--radius); font-size:.85rem; cursor:pointer; font-family:inherit; }
+    .btn-logout:hover { background:rgba(255,255,255,.25); }
+
+    /* Layout */
+    main { flex:1; max-width:1200px; width:100%; margin:2rem auto; padding:0 1.25rem; }
+    .page-header { margin-bottom:1.5rem; }
+    .page-header h1 { font-size:1.5rem; font-weight:700; }
+    .page-header p { color:var(--muted); font-size:.9rem; margin-top:.25rem; }
+
+    /* Stat grid */
+    .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+    .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.1rem 1.25rem; box-shadow:var(--shadow); }
+    .stat-card .label { font-size:.75rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; margin-bottom:.3rem; }
+    .stat-card .value { font-size:2rem; font-weight:700; color:var(--brand); line-height:1; }
+    .stat-card .sub { font-size:.75rem; color:var(--muted); margin-top:.2rem; }
+
+    /* Cards */
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:1.5rem; margin-bottom:1.5rem; }
+    .card-title { font-size:1rem; font-weight:600; margin-bottom:1rem; display:flex; align-items:center; justify-content:space-between; }
+    .card-title a { font-size:.8rem; font-weight:400; color:var(--brand); text-decoration:none; }
+
+    /* Two-col grid */
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem; }
+    @media(max-width:768px){ .grid-2 { grid-template-columns:1fr; } }
+
+    /* Table */
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:.88rem; }
+    th { background:var(--bg); text-align:left; padding:.55rem .85rem; font-size:.75rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--border); }
+    td { padding:.6rem .85rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:#f9fafb; }
+
+    /* Buttons */
+    .btn { display:inline-block; padding:.45rem 1rem; border-radius:var(--radius); font-size:.88rem; font-weight:500; cursor:pointer; border:none; text-decoration:none; }
+    .btn-primary { background:var(--brand); color:#fff; }
+    .btn-primary:hover { background:var(--brand-dark); }
+    .btn-sm { padding:.3rem .7rem; font-size:.78rem; }
+
+    /* Badges */
+    .badge { display:inline-block; padding:.2rem .6rem; border-radius:99px; font-size:.72rem; font-weight:600; }
+    .badge-blue   { background:#dbeafe; color:#1e40af; }
+    .badge-green  { background:#dcfce7; color:#166534; }
+    .badge-red    { background:#fee2e2; color:#991b1b; }
+    .badge-yellow { background:#fef9c3; color:#854d0e; }
+    .badge-gray   { background:#f3f4f6; color:#374151; }
+    .badge-purple { background:#ede9fe; color:#6d28d9; }
+
+    /* Alerts */
+    .alert { padding:.75rem 1rem; border-radius:var(--radius); margin-bottom:1rem; font-size:.9rem; }
+    .alert-warning { background:#fef9c3; border:1px solid #fde68a; color:#854d0e; }
+    .alert-info    { background:#dbeafe; border:1px solid #bfdbfe; color:#1e40af; }
+
+    /* Progress bar */
+    .progress { height:8px; background:#e5e7eb; border-radius:99px; overflow:hidden; margin-top:.3rem; }
+    .progress-bar { height:100%; border-radius:99px; background:var(--brand); }
+
+    /* Quick actions */
+    .quick-actions { display:flex; flex-wrap:wrap; gap:.75rem; margin-bottom:1.5rem; }
+
+    /* Announcements */
+    .announcement { border-left:3px solid var(--brand); padding:.6rem 1rem; background:#f0f4ff; border-radius:0 var(--radius) var(--radius) 0; margin-bottom:.75rem; font-size:.9rem; }
+    .announcement .date { font-size:.75rem; color:var(--muted); margin-top:.2rem; }
+
+    footer { text-align:center; padding:1.25rem; font-size:.8rem; color:var(--muted); border-top:1px solid var(--border); }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+<nav>
+  <span class="brand">🏫 SchoolMS</span>
+  <div class="nav-links">
+    {% if user.is_authenticated %}
+      <span class="role-tag">{{ user.get_role_display }}</span>
+      {% if user.role == 'system_owner' or user.role == 'system_admin' %}
+        <a href="{% url 'core:superuser_dashboard' %}">Dashboard</a>
+        <a href="{% url 'admin:index' %}">Admin Panel</a>
+      {% elif user.role == 'headteacher' %}
+        <a href="{% url 'core:headteacher_dashboard' %}">Dashboard</a>
+        <a href="{% url 'admin:index' %}">Admin Panel</a>
+      {% elif user.role == 'dos' %}
+        <a href="{% url 'core:dos_dashboard' %}">Dashboard</a>
+        <a href="{% url 'core:teacher_mark_entry' %}">Enter Marks</a>
+      {% elif user.role == 'bursar' %}
+        <a href="{% url 'core:bursar_dashboard' %}">Dashboard</a>
+      {% elif user.role == 'teacher' or user.role == 'class_teacher' %}
+        <a href="{% url 'core:teacher_dashboard' %}">Dashboard</a>
+        <a href="{% url 'core:teacher_mark_entry' %}">Enter Marks</a>
+      {% elif user.role == 'student' %}
+        <a href="{% url 'core:student_dashboard' %}">Dashboard</a>
+      {% elif user.role == 'parent' %}
+        <a href="{% url 'core:parent_dashboard' %}">Dashboard</a>
+      {% endif %}
+      <form method="post" action="{% url 'logout' %}" style="margin:0;">
+        {% csrf_token %}
+        <button type="submit" class="btn-logout">Log out</button>
+      </form>
+    {% else %}
+      <a href="{% url 'login' %}">Log in</a>
+    {% endif %}
+  </div>
+</nav>
+<main>{% block content %}{% endblock %}</main>
+<footer>SchoolMS &copy; {% now "Y" %} — {{ user.school.name|default:"" }}</footer>
+</body>
+</html>

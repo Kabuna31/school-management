@@ -1,0 +1,118 @@
+{% extends "admin/index.html" %}
+{% load i18n %}
+
+{% block content %}
+<style>
+  .sm-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .sm-stat {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1.1rem 1.25rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,.07);
+  }
+  .sm-stat .label {
+    font-size: .75rem;
+    color: #6b7280;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: .4rem;
+  }
+  .sm-stat .value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1a56db;
+    line-height: 1;
+  }
+  .sm-stat .sub {
+    font-size: .78rem;
+    color: #9ca3af;
+    margin-top: .25rem;
+  }
+  .sm-quick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-bottom: 2rem;
+  }
+  .sm-quick a {
+    background: #1a56db;
+    color: #fff;
+    padding: .5rem 1rem;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: .88rem;
+    font-weight: 500;
+  }
+  .sm-quick a:hover { background: #1040b0; }
+  .sm-quick a.secondary {
+    background: #f3f4f6;
+    color: #111827;
+    border: 1px solid #e5e7eb;
+  }
+  .sm-quick a.secondary:hover { background: #e5e7eb; }
+  .sm-section-title {
+    font-size: .8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #6b7280;
+    margin-bottom: .75rem;
+  }
+</style>
+
+<!-- Stats row -->
+<div class="sm-stats">
+  <div class="sm-stat">
+    <div class="label">Schools</div>
+    <div class="value">{{ school_count }}</div>
+    <div class="sub">registered</div>
+  </div>
+  <div class="sm-stat">
+    <div class="label">Students</div>
+    <div class="value">{{ student_count }}</div>
+    <div class="sub">enrolled</div>
+  </div>
+  <div class="sm-stat">
+    <div class="label">Staff</div>
+    <div class="value">{{ staff_count }}</div>
+    <div class="sub">employees</div>
+  </div>
+  <div class="sm-stat">
+    <div class="label">Subjects</div>
+    <div class="value">{{ subject_count }}</div>
+    <div class="sub">active</div>
+  </div>
+  <div class="sm-stat">
+    <div class="label">Marks Entered</div>
+    <div class="value">{{ mark_count }}</div>
+    <div class="sub">total records</div>
+  </div>
+  <div class="sm-stat">
+    <div class="label">Avg Score</div>
+    <div class="value">{{ avg_score }}</div>
+    <div class="sub">across all subjects</div>
+  </div>
+</div>
+
+<!-- Quick actions -->
+<div class="sm-section-title">Quick Actions</div>
+<div class="sm-quick">
+  <a href="{% url 'admin:core_user_add' %}">+ Add User</a>
+  <a href="{% url 'admin:core_studentprofile_add' %}">+ Add Student</a>
+  <a href="{% url 'admin:core_employeeprofile_add' %}">+ Add Staff</a>
+  <a href="{% url 'admin:core_subject_add' %}">+ Add Subject</a>
+  <a href="{% url 'admin:core_classlevel_add' %}">+ Add Class</a>
+  <a href="{% url 'admin:core_stream_add' %}">+ Add Stream</a>
+  <a href="{% url 'core:teacher_mark_entry' %}" class="secondary">✏️ Enter Marks</a>
+</div>
+
+<!-- Default Django app/model list -->
+{{ block.super }}
+{% endblock %}

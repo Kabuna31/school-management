@@ -1,0 +1,66 @@
+{% extends "core/base.html" %}
+{% block title %}Log In — SchoolMS{% endblock %}
+
+{% block content %}
+<div style="max-width: 420px; margin: 4rem auto;">
+
+  <div style="text-align:center; margin-bottom:1.75rem;">
+    <div style="font-size:2.5rem;">🏫</div>
+    <h1 style="font-size:1.4rem; font-weight:700; margin-top:.5rem;">SchoolMS</h1>
+    <p style="color:var(--muted); font-size:.9rem; margin-top:.25rem;">
+      Sign in to your account
+    </p>
+  </div>
+
+  <div class="card">
+    {% if form.errors %}
+      <div class="alert alert-error" style="margin-bottom:1rem;">
+        Incorrect username or password. Please try again.
+      </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'login' %}">
+      {% csrf_token %}
+
+      <!-- next param so Django redirects correctly after login -->
+      {% if next %}
+        <input type="hidden" name="next" value="{{ next }}">
+      {% endif %}
+
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="id_username">Username</label>
+        <input
+          type="text"
+          name="username"
+          id="id_username"
+          autofocus
+          autocomplete="username"
+          placeholder="Enter your username"
+          value="{{ form.username.value|default:'' }}"
+        >
+      </div>
+
+      <div class="form-group" style="margin-bottom:1.25rem;">
+        <label for="id_password">Password</label>
+        <input
+          type="password"
+          name="password"
+          id="id_password"
+          autocomplete="current-password"
+          placeholder="Enter your password"
+        >
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;">
+        Log In
+      </button>
+    </form>
+  </div>
+
+  <p style="text-align:center; font-size:.82rem; color:var(--muted); margin-top:1rem;">
+    Forgot your password?
+    <a href="{% url 'password_reset' %}" style="color:var(--brand);">Reset it here</a>
+  </p>
+
+</div>
+{% endblock %}
