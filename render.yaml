@@ -8,7 +8,17 @@ services:
       python manage.py collectstatic --noinput &&
       python manage.py migrate --noinput &&
       python manage.py ensure_superuser
-    startCommand: gunicorn config.wsgi:application --workers 1 --timeout 120 --bind 0.0.0.0:$PORT --log-level info
+    startCommand: >
+      gunicorn config.wsgi:application
+      --workers 1
+      --threads 2
+      --timeout 60
+      --keep-alive 5
+      --bind 0.0.0.0:$PORT
+      --log-level info
+      --access-logfile -
+      --error-logfile -
+    healthCheckPath: /health/
     envVars:
       - key: DJANGO_SECRET_KEY
         generateValue: true
@@ -28,6 +38,8 @@ services:
         value: "admin@school.com"
       - key: SUPERUSER_PASSWORD
         value: "changeme123"
+      - key: WEB_CONCURRENCY
+        value: "1"
 
 databases:
   - name: schoolms-db

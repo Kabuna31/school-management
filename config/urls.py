@@ -1,19 +1,15 @@
-"""
-config/urls.py  —  project-level URL configuration
-"""
 from django.contrib import admin
 from django.urls import path, include
+from django.http import HttpResponse
+
+
+def health(request):
+    return HttpResponse("ok", status=200)
 
 
 urlpatterns = [
-    # Django admin site
+    path('health/', health, name='health'),
     path('admin/', admin.site.urls),
-
-    # Built-in auth: login, logout, password change/reset
-    # Templates are loaded from templates/registration/
     path('accounts/', include('django.contrib.auth.urls')),
-
-    # Core app — all app URLs under the 'core' namespace
     path('', include('core.urls', namespace='core')),
 ]
-
