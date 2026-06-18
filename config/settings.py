@@ -1,28 +1,32 @@
 from pathlib import Path
 import os
+import dj_database_url
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-# settings.py lives at: school_management/config/settings.py
-# BASE_DIR resolves to: school_management/
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # ---------------------------------------------------------------------------
 # Security
 # ---------------------------------------------------------------------------
-# Set DJANGO_SECRET_KEY in your environment for production.
-# Never commit a real secret key to version control.
 SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
     'django-insecure-dev-fallback-replace-before-production'
 )
 
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'False'
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ["*"]
-
+ALLOWED_HOSTS = [
+    h.strip() for h in
+    os.environ.get('ALLOWED_HOSTS', '').split(',')
+    if h.strip()
+] or [
+    'school-management-cr57.onrender.com',
+    '.onrender.com',
+    'localhost',
+    '127.0.0.1',
+]
 
 # ---------------------------------------------------------------------------
 # Application definition
@@ -34,14 +38,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'import_export',   # pip install django-import-export
+    'import_export',
     'core',
 ]
 
 MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
+    # SecurityMiddleware must be first
     'django.middleware.security.SecurityMiddleware',
+    # WhiteNoise must be second (right after Security)
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -55,9 +60,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        # Global templates folder — e.g. school_management/templates/
         'DIRS': [BASE_DIR / 'templates'],
-        # Also load templates from each app's own templates/ subfolder
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -72,18 +75,30 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-
 # ---------------------------------------------------------------------------
 # Database
+# FIX: fall back to SQLite locally when DATABASE_URL is not set,
+#      instead of passing an empty string to dj_database_url.parse()
+#      which returns {} and crashes Django.
 # ---------------------------------------------------------------------------
-import os
-import dj_database_url
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL')
-    )
-}
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
@@ -96,13 +111,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# Django's built-in auth views are mounted at /accounts/ in urls.py.
-# After login, Django sends the user to LOGIN_REDIRECT_URL.
-# RoleRedirectView (mounted at '/') then routes them to the right dashboard.
 LOGIN_URL           = '/accounts/login/'
-LOGIN_REDIRECT_URL  = '/'                   # → core:role_redirect
+LOGIN_REDIRECT_URL  = '/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
-
 
 # ---------------------------------------------------------------------------
 # Internationalisation
@@ -112,19 +123,38 @@ TIME_ZONE     = 'Africa/Kampala'
 USE_I18N      = True
 USE_TZ        = True
 
-
 # ---------------------------------------------------------------------------
 # Static files
+# WhiteNoise serves static files in production without a separate web server.
+# CompressedManifestStaticFilesStorage adds cache-busting hashes to filenames.
 # ---------------------------------------------------------------------------
 STATIC_URL  = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'   # populated by collectstatic
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Only register the local static dir if it actually exists on disk.
-# This prevents Django raising ImproperlyConfigured on a fresh checkout
-# before the folder has been created.
+# FIX: use WhiteNoise storage so collectstatic works correctly in production
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
+
 _local_static = BASE_DIR / 'static'
 STATICFILES_DIRS = [_local_static] if _local_static.exists() else []
 
+# ---------------------------------------------------------------------------
+# Security hardening for production
+# ---------------------------------------------------------------------------
+if not DEBUG:
+    CSRF_TRUSTED_ORIGINS = [
+        'https://school-management-cr57.onrender.com',
+        'https://*.onrender.com',
+    ]
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE   = True
+    CSRF_COOKIE_SECURE      = True
 
 # ---------------------------------------------------------------------------
 # Misc
