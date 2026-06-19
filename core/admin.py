@@ -1,7 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from import_export.admin import ImportExportModelAdmin
-from .resources import UserResource
 from django.utils.html import format_html
 from django.urls import reverse
 from django.db.models import Count, Avg
@@ -111,7 +110,6 @@ class SchoolScopedMixin:
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
         if self._is_scoped(request):
-            # Show school as read-only info rather than hiding entirely
             if 'school' not in readonly:
                 readonly.append('school')
         return readonly
@@ -159,23 +157,20 @@ class StudentProfileInline(admin.StackedInline):
                 kwargs['queryset'] = Stream.objects.filter(school=school)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-# ── Schools ───────────────────────────────────────────────────────────────────
+
+# ── Schools ────────────────────────────────────────────────────────────────
+
 @admin.register(School)
 class SchoolAdmin(admin.ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
 
+
 # ── User ───────────────────────────────────────────────────────────────────
-
 @admin.register(User)
-class UserAdmin(
-    ImportExportModelAdmin,
-    SchoolScopedMixin,
-    BaseUserAdmin
-):
+class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
 
-    resource_class = UserResource
-    school_field = "school"
+    resource_classes = [UserResource]
 
     list_display = (
         "username",
@@ -205,58 +200,112 @@ class UserAdmin(
         (
             "School & Role",
             {
-                "fields": ("school", "role")
+                "fields": (
+                    "school",
+                    "role",
+                )
             },
         ),
     )
 
-    add_fieldsets = BaseUserAdmin.add_fieldsets + (
+    add_fieldsets = (
         (
-            "School & Role",
+            None,
             {
-                "fields": ("school", "role")
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "password1",
+                    "password2",
+                    "school",
+                    "role",
+                ),
             },
         ),
     )
 
-    # ── FIX 1: clean queryset (DO NOT hide system_admin)
     def get_queryset(self, request):
         qs = super().get_queryset(request)
 
         if self._is_scoped(request):
-            school = self._user_school(request)
-
-            qs = qs.filter(school=school)
+            qs = qs.filter(
+                school=request.user.school
+            )
 
         return qs
 
-    # ── FIX 2: proper role ↔ superuser sync
     def save_model(self, request, obj, form, change):
 
+        # Headteacher → force same school
         if self._is_scoped(request):
             obj.school = request.user.school
 
-            # SYSTEM ADMIN RULE
-            if obj.role == "system_admin":
-                obj.is_superuser = True
-                obj.is_staff = True
+        # Prevent creation of system admin
+        if obj.role == "system_admin":
 
-            # ALL OTHERS
-            else:
-                obj.is_superuser = False
+            # allow editing existing only
+            if not change:
+                obj.role = "headteacher"
 
-        super().save_model(request, obj, form, change)
+            obj.is_superuser = change
+            obj.is_staff = True
 
-    # ── FIX 3: restrict school field safely
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        else:
+            obj.is_superuser = False
+            obj.is_staff = True
 
-        school = self._user_school(request)
+        super().save_model(
+            request,
+            obj,
+            form,
+            change
+        )
 
-        if self._is_scoped(request):
-            if db_field.name == "school":
-                kwargs["queryset"] = School.objects.filter(pk=school.pk)
+    def get_form(self, request, obj=None, **kwargs):
 
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+        form = super().get_form(
+            request,
+            obj,
+            **kwargs
+        )
+
+        # Nobody except superuser can assign system_admin
+        if not request.user.is_superuser:
+
+            role = form.base_fields.get("role")
+
+            if role:
+
+                role.choices = [
+                    x for x in role.choices
+                    if x[0] != "system_admin"
+                ]
+
+        return form
+
+    def formfield_for_foreignkey(
+        self,
+        db_field,
+        request,
+        **kwargs
+    ):
+
+        if (
+            self._is_scoped(request)
+            and db_field.name == "school"
+        ):
+
+            kwargs["queryset"] = (
+                School.objects.filter(
+                    pk=request.user.school.pk
+                )
+            )
+
+        return super().formfield_for_foreignkey(
+            db_field,
+            request,
+            **kwargs
+        )
 
     @admin.display(description="Name")
     def full_name(self, obj):
@@ -278,6 +327,7 @@ class UserAdmin(
             colors.get(obj.role, "#374151"),
             obj.get_role_display(),
         )
+
 
 # ── Stream ─────────────────────────────────────────────────────────────────
 
@@ -492,12 +542,11 @@ def _patched_index(self, request, extra_context=None):
         and school
     )
 
-    # Scope stats to school for headteachers
-    mark_qs    = Mark.objects.filter(school=school)    if is_scoped else Mark.objects.all()
+    mark_qs    = Mark.objects.filter(school=school)           if is_scoped else Mark.objects.all()
     student_qs = StudentProfile.objects.filter(school=school) if is_scoped else StudentProfile.objects.all()
     staff_qs   = EmployeeProfile.objects.filter(school=school) if is_scoped else EmployeeProfile.objects.all()
-    subject_qs = Subject.objects.filter(school=school) if is_scoped else Subject.objects.all()
-    school_qs  = School.objects.filter(pk=school.pk)  if is_scoped else School.objects.all()
+    subject_qs = Subject.objects.filter(school=school)        if is_scoped else Subject.objects.all()
+    school_qs  = School.objects.filter(pk=school.pk)          if is_scoped else School.objects.all()
 
     avg = mark_qs.aggregate(a=Avg('score'))['a']
     extra_context.update({

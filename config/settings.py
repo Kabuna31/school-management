@@ -22,7 +22,7 @@ ALLOWED_HOSTS = [
     os.environ.get('ALLOWED_HOSTS', '').split(',')
     if h.strip()
 ] or [
-    'school-management-cr57.onrender.com',
+    'school-management-d21p.onrender.com',
     '.onrender.com',
     'localhost',
     '127.0.0.1',
@@ -43,9 +43,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    # SecurityMiddleware must be first
     'django.middleware.security.SecurityMiddleware',
-    # WhiteNoise must be second (right after Security)
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -77,13 +75,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # ---------------------------------------------------------------------------
 # Database
-# FIX: fall back to SQLite locally when DATABASE_URL is not set,
-#      instead of passing an empty string to dj_database_url.parse()
-#      which returns {} and crashes Django.
 # ---------------------------------------------------------------------------
-import dj_database_url
-import os
-
 DATABASES = {
     "default": dj_database_url.config(
         default=os.getenv(
@@ -93,6 +85,7 @@ DATABASES = {
         conn_max_age=600,
     )
 }
+
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
@@ -119,13 +112,10 @@ USE_TZ        = True
 
 # ---------------------------------------------------------------------------
 # Static files
-# WhiteNoise serves static files in production without a separate web server.
-# CompressedManifestStaticFilesStorage adds cache-busting hashes to filenames.
 # ---------------------------------------------------------------------------
 STATIC_URL  = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# FIX: use WhiteNoise storage so collectstatic works correctly in production
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
@@ -143,12 +133,41 @@ STATICFILES_DIRS = [_local_static] if _local_static.exists() else []
 # ---------------------------------------------------------------------------
 if not DEBUG:
     CSRF_TRUSTED_ORIGINS = [
-        'https://school-management-cr57.onrender.com',
+        'https://school-management-d21p.onrender.com',
         'https://*.onrender.com',
     ]
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE   = True
     CSRF_COOKIE_SECURE      = True
+
+# ---------------------------------------------------------------------------
+# Logging — prints full tracebacks to Render log stream
+# ---------------------------------------------------------------------------
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'ERROR',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Misc
