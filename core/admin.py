@@ -480,12 +480,12 @@ class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 class MarkAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     resource_classes = [MarkResource]
     list_display     = ('student_name', 'subject', 'term', 'score', 'grade', 'teacher_name', 'school')
-    list_filter      = ('school', 'term', 'subject', 'student__class_level', 'student__stream')
+    list_filter      = ('school', 'exam', 'subject', 'student__class_level', 'student__stream')
     search_fields    = (
         'student__user__first_name', 'student__user__last_name',
         'student__admission_number', 'subject__name',
     )
-    ordering         = ('school', 'term', 'student__user__first_name')
+    ordering         = ('school', 'exam', 'student__user__first_name')
     list_per_page    = 40
     list_editable    = ('score',)
 

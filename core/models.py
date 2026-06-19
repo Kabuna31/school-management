@@ -104,7 +104,7 @@ class StudentProfile(models.Model):
     admission_number = models.CharField(max_length=20)
     gender           = models.CharField(max_length=1, choices=[('M', 'Male'), ('F', 'Female')])
     class_level      = models.ForeignKey(ClassLevel, on_delete=models.SET_NULL, null=True, blank=True)
-    stream           = models.ForeignKey(Stream,     on_delete=models.SET_NULL, null=True, blank=True)
+    stream           = models.ForeignKey(Stream, on_delete=models.SET_NULL, null=True, blank=True)
     parent           = models.ManyToManyField(ParentProfile, related_name='children', blank=True)
 
     class Meta:
@@ -129,24 +129,73 @@ class Subject(models.Model):
         return f"{self.name} ({self.code})"
 
 
-class Mark(models.Model):
-    TERM_CHOICES = [
-        ('Term 1', 'Term 1'),
-        ('Term 2', 'Term 2'),
-        ('Term 3', 'Term 3'),
-    ]
+# 6 exam slots per year
+EXAM_CHOICES = [
+    ('T1_Mid', 'Term 1 — Mid Term'),
+    ('T1_End', 'Term 1 — End of Term'),
+    ('T2_Mid', 'Term 2 — Mid Term'),
+    ('T2_End', 'Term 2 — End of Term'),
+    ('T3_Mid', 'Term 3 — Mid Term'),
+    ('T3_End', 'Term 3 — End of Term'),
+]
 
+# Map exam → parent term (for grouping in report cards)
+EXAM_TERM_MAP = {
+    'T1_Mid': 'Term 1', 'T1_End': 'Term 1',
+    'T2_Mid': 'Term 2', 'T2_End': 'Term 2',
+    'T3_Mid': 'Term 3', 'T3_End': 'Term 3',
+}
+
+class Mark(models.Model):
     school   = models.ForeignKey(School,         on_delete=models.CASCADE)
     student  = models.ForeignKey(StudentProfile, on_delete=models.CASCADE)
     subject  = models.ForeignKey(Subject,        on_delete=models.CASCADE)
     teacher  = models.ForeignKey(
         EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True
     )
-    term     = models.CharField(max_length=20, choices=TERM_CHOICES)
+    exam     = models.CharField(max_length=10, choices=EXAM_CHOICES)
     score    = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
 
     class Meta:
-        unique_together = ('school', 'student', 'subject', 'term')
+        unique_together = ('school', 'student', 'subject', 'exam')
 
     def __str__(self):
-        return f"{self.student} — {self.subject} {self.term}: {self.score}"
+        return f"{self.student} — {self.subject} {self.get_exam_display()}: {self.score}"
+
+    @property
+    def grade(self):
+        s = float(self.score)
+        if s >= 80: return 'A'
+        if s >= 65: return 'B'
+        if s >= 50: return 'C'
+        return 'F'
+
+    @property
+    def term(self):
+        return EXAM_TERM_MAP.get(self.exam, '')
+
+
+# ---------------------------------------------------------------------------
+# 6. Timetable
+# ---------------------------------------------------------------------------
+DAY_CHOICES = [
+    ('Mon', 'Monday'), ('Tue', 'Tuesday'), ('Wed', 'Wednesday'),
+    ('Thu', 'Thursday'), ('Fri', 'Friday'),
+]
+
+class Timetable(models.Model):
+    school      = models.ForeignKey(School,         on_delete=models.CASCADE)
+    class_level = models.ForeignKey(ClassLevel,     on_delete=models.CASCADE)
+    stream      = models.ForeignKey(Stream,         on_delete=models.SET_NULL, null=True, blank=True)
+    subject     = models.ForeignKey(Subject,        on_delete=models.CASCADE)
+    teacher     = models.ForeignKey(EmployeeProfile,on_delete=models.SET_NULL, null=True, blank=True)
+    day         = models.CharField(max_length=3, choices=DAY_CHOICES)
+    start_time  = models.TimeField()
+    end_time    = models.TimeField()
+    room        = models.CharField(max_length=50, blank=True)
+
+    class Meta:
+        ordering = ['day', 'start_time']
+
+    def __str__(self):
+        return f"{self.class_level} {self.get_day_display()} {self.start_time}–{self.end_time} {self.subject}"
