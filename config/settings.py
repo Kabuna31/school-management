@@ -15,7 +15,7 @@ SECRET_KEY = os.environ.get(
     'django-insecure-dev-fallback-replace-before-production'
 )
 
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = [
     h.strip() for h in
@@ -81,24 +81,18 @@ WSGI_APPLICATION = 'config.wsgi.application'
 #      instead of passing an empty string to dj_database_url.parse()
 #      which returns {} and crashes Django.
 # ---------------------------------------------------------------------------
-DATABASE_URL = os.environ.get('DATABASE_URL', '')
+import dj_database_url
+import os
 
-if DATABASE_URL:
-    DATABASES = {
-        'default': dj_database_url.parse(
-            DATABASE_URL,
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
-
+DATABASES = {
+    "default": dj_database_url.config(
+        default=os.getenv(
+            "DATABASE_URL",
+            "sqlite:///db.sqlite3"
+        ),
+        conn_max_age=600,
+    )
+}
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
