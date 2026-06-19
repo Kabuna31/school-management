@@ -8,6 +8,7 @@ urlpatterns = [
 
     # ── Dashboards ─────────────────────────────────────────────────────────
     path('dashboard/superuser/',   views.SuperuserDashboardView.as_view(),   name='superuser_dashboard'),
+    path('dashboard/schooladmin/', views.SchooladminDashboardView.as_view(), name='schooladmin_dashboard'),
     path('dashboard/headteacher/', views.HeadteacherDashboardView.as_view(), name='headteacher_dashboard'),
     path('dashboard/dos/',         views.DOSDashboardView.as_view(),         name='dos_dashboard'),
     path('dashboard/bursar/',      views.BursarDashboardView.as_view(),      name='bursar_dashboard'),

@@ -25,93 +25,180 @@ admin.site.index_title = 'Dashboard'
 
 class SchoolScopedMixin:
     """
-    Mixin that scopes every admin view to the logged-in user's school
-    when the user is a headteacher.
+    Restrict data to user's school for:
+    - school_admin
+    - headteacher
 
-    System admins (is_superuser or role=system_admin) see everything.
-    Headteachers only see records that belong to their school.
+    System admin / superuser sees everything.
     """
 
-    school_field = 'school'   # FK path to School on the model
+    school_field = "school"
+
+    SCOPED_ROLES = ["school_admin", "headteacher"]
 
     def _is_scoped(self, request):
-        """Return True if this user should be restricted to their school."""
         return (
             not request.user.is_superuser
-            and getattr(request.user, 'role', None) == 'headteacher'
+            and getattr(request.user, "role", None) in self.SCOPED_ROLES
         )
 
     def _user_school(self, request):
-        return getattr(request.user, 'school', None)
+        return getattr(request.user, "school", None)
 
-    # ── Queryset scoping ───────────────────────────────────────────────────
+    # ── Queryset ─────────────────────────────
     def get_queryset(self, request):
         qs = super().get_queryset(request)
+
         if self._is_scoped(request):
             school = self._user_school(request)
+
             if school:
                 qs = qs.filter(**{self.school_field: school})
             else:
                 qs = qs.none()
+
         return qs
 
-    # ── FK dropdowns scoping ───────────────────────────────────────────────
+    # ── Foreign keys ─────────────────────────
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        school = self._user_school(request)
-        if self._is_scoped(request) and school:
-            if db_field.related_model == School:
-                kwargs['queryset'] = School.objects.filter(pk=school.pk)
-            elif db_field.related_model == User:
-                kwargs['queryset'] = User.objects.filter(school=school)
-            elif db_field.related_model == EmployeeProfile:
-                kwargs['queryset'] = EmployeeProfile.objects.filter(school=school)
-            elif db_field.related_model == StudentProfile:
-                kwargs['queryset'] = StudentProfile.objects.filter(school=school)
-            elif db_field.related_model == ClassLevel:
-                kwargs['queryset'] = ClassLevel.objects.filter(school=school)
-            elif db_field.related_model == Stream:
-                kwargs['queryset'] = Stream.objects.filter(school=school)
-            elif db_field.related_model == Subject:
-                kwargs['queryset'] = Subject.objects.filter(school=school)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    # ── M2M dropdowns scoping ──────────────────────────────────────────────
-    def formfield_for_manytomany(self, db_field, request, **kwargs):
         school = self._user_school(request)
-        if self._is_scoped(request) and school:
-            if db_field.related_model == ParentProfile:
-                kwargs['queryset'] = ParentProfile.objects.filter(school=school)
-        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
-    # ── Autocomplete scoping ───────────────────────────────────────────────
-    def get_search_results(self, request, queryset, search_term):
-        queryset, use_distinct = super().get_search_results(request, queryset, search_term)
+        if self._is_scoped(request) and school:
+
+            mapping = {
+                School: School.objects.filter(pk=school.pk),
+                User: User.objects.filter(school=school),
+                EmployeeProfile: EmployeeProfile.objects.filter(school=school),
+                StudentProfile: StudentProfile.objects.filter(school=school),
+                ClassLevel: ClassLevel.objects.filter(school=school),
+                Stream: Stream.objects.filter(school=school),
+                Subject: Subject.objects.filter(school=school),
+            }
+
+            if db_field.related_model in mapping:
+                kwargs["queryset"] = mapping[db_field.related_model]
+
+        return super().formfield_for_foreignkey(
+            db_field,
+            request,
+            **kwargs
+        )
+
+    # ── Many to many ─────────────────────────
+    def formfield_for_manytomany(
+        self,
+        db_field,
+        request,
+        **kwargs
+    ):
+
+        school = self._user_school(request)
+
+        if (
+            self._is_scoped(request)
+            and school
+            and db_field.related_model == ParentProfile
+        ):
+            kwargs["queryset"] = ParentProfile.objects.filter(
+                school=school
+            )
+
+        return super().formfield_for_manytomany(
+            db_field,
+            request,
+            **kwargs
+        )
+
+    # ── Search ───────────────────────────────
+    def get_search_results(
+        self,
+        request,
+        queryset,
+        search_term
+    ):
+
+        queryset, use_distinct = (
+            super().get_search_results(
+                request,
+                queryset,
+                search_term
+            )
+        )
+
         if self._is_scoped(request):
             school = self._user_school(request)
+
             if school:
-                queryset = queryset.filter(**{self.school_field: school})
+                queryset = queryset.filter(
+                    **{self.school_field: school}
+                )
+
         return queryset, use_distinct
 
-    # ── Pre-populate school on new records ─────────────────────────────────
-    def save_model(self, request, obj, form, change):
-        if self._is_scoped(request) and not change:
-            school = self._user_school(request)
-            if school and hasattr(obj, 'school'):
-                obj.school = school
-        super().save_model(request, obj, form, change)
+    # ── Save ─────────────────────────────────
+    def save_model(
+        self,
+        request,
+        obj,
+        form,
+        change
+    ):
 
-    # ── Hide school field for headteachers (it's always theirs) ───────────
-    def get_fields(self, request, obj=None):
-        fields = list(super().get_fields(request, obj))
-        if self._is_scoped(request) and 'school' in fields:
-            fields.remove('school')
+        if (
+            self._is_scoped(request)
+            and hasattr(obj, "school")
+        ):
+            obj.school = request.user.school
+
+        super().save_model(
+            request,
+            obj,
+            form,
+            change
+        )
+
+    # ── Hide school field ────────────────────
+    def get_fields(
+        self,
+        request,
+        obj=None
+    ):
+
+        fields = list(
+            super().get_fields(
+                request,
+                obj
+            )
+        )
+
+        if (
+            self._is_scoped(request)
+            and "school" in fields
+        ):
+            fields.remove("school")
+
         return fields
 
-    def get_readonly_fields(self, request, obj=None):
-        readonly = list(super().get_readonly_fields(request, obj))
-        if self._is_scoped(request):
-            if 'school' not in readonly:
-                readonly.append('school')
+    def get_readonly_fields(
+        self,
+        request,
+        obj=None
+    ):
+
+        readonly = list(
+            super().get_readonly_fields(
+                request,
+                obj
+            )
+        )
+
+        if (
+            self._is_scoped(request)
+            and "school" not in readonly
+        ):
+            readonly.append("school")
+
         return readonly
 
 
@@ -147,7 +234,7 @@ class StudentProfileInline(admin.StackedInline):
         school = getattr(request.user, 'school', None)
         is_scoped = (
             not request.user.is_superuser
-            and getattr(request.user, 'role', None) == 'headteacher'
+            and getattr(request.user, 'role', None) in ['school_admin', 'headteacher']
             and school
         )
         if is_scoped:
@@ -236,7 +323,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
 
     def save_model(self, request, obj, form, change):
 
-        # Headteacher → force same school
+        # Schooladmin → force same school
         if self._is_scoped(request):
             obj.school = request.user.school
 
@@ -245,7 +332,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
 
             # allow editing existing only
             if not change:
-                obj.role = "headteacher"
+                obj.role = "school_admin"
 
             obj.is_superuser = change
             obj.is_staff = True
@@ -316,6 +403,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
 
         colors = {
             "system_admin": "#7c3aed",
+            "school_admin": "#1d4ed8",
             "headteacher": "#1d4ed8",
             "teacher": "#0369a1",
             "student": "#374151",
@@ -538,7 +626,7 @@ def _patched_index(self, request, extra_context=None):
     school = getattr(request.user, 'school', None)
     is_scoped = (
         not request.user.is_superuser
-        and getattr(request.user, 'role', None) == 'headteacher'
+        and getattr(request.user, 'role', None) in ['school_admin', 'headteacher']
         and school
     )
 

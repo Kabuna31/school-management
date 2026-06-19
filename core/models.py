@@ -19,7 +19,8 @@ class School(models.Model):
 # ---------------------------------------------------------------------------
 ROLE_CHOICES = (
     ('system_admin',   'System Admin'),
-    ('headteacher',    'School Administrator'),
+    ('school_admin',   'School System Administrator'),
+    ('headteacher',    'Headteacher'),
     ('bursar',         'School Bursar'),
     ('nurse',          'School Nurse'),
     ('librarian',      'School Librarian'),

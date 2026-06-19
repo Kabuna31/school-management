@@ -9,28 +9,36 @@ from .models import (
     StudentProfile, EmployeeProfile, ParentProfile, Mark
 )
 
-ADMIN_ROLES  = ['system_admin', 'headteacher']
+ADMIN_ROLES  = ['system_admin', 'school_admin','headteacher']
 STAFF_ROLES  = ['teacher', 'class_teacher', 'dos']
 ALLOWED_MARK_ENTRY_ROLES = ADMIN_ROLES + STAFF_ROLES
 
 
 # ── Role Router ────────────────────────────────────────────────────────────
-
 class RoleRedirectView(LoginRequiredMixin, RedirectView):
     permanent = False
 
     def get_redirect_url(self, *args, **kwargs):
+
         role_map = {
-            'system_admin':   reverse('core:superuser_dashboard'),
-            'headteacher':    reverse('core:headteacher_dashboard'),
-            'dos':            reverse('core:dos_dashboard'),
-            'bursar':         reverse('core:bursar_dashboard'),
-            'teacher':        reverse('core:teacher_dashboard'),
-            'class_teacher':  reverse('core:teacher_dashboard'),
-            'student':        reverse('core:student_dashboard'),
-            'parent':         reverse('core:parent_dashboard'),
+            'system_admin': reverse('core:superuser_dashboard'),
+            'school_admin': reverse('core:schooladmin_dashboard'),
+            'headteacher': reverse('core:headteacher_dashboard'),
+
+            'dos': reverse('core:dos_dashboard'),
+            'bursar': reverse('core:bursar_dashboard'),
+
+            'teacher': reverse('core:teacher_dashboard'),
+            'class_teacher': reverse('core:teacher_dashboard'),
+
+            'student': reverse('core:student_dashboard'),
+            'parent': reverse('core:parent_dashboard'),
         }
-        return role_map.get(self.request.user.role, '/admin/')
+
+        return role_map.get(
+            getattr(self.request.user, "role", None),
+            '/admin/'
+        )
 
     @staticmethod
     def _safe_reverse(url_name, fallback='/'):
@@ -38,7 +46,6 @@ class RoleRedirectView(LoginRequiredMixin, RedirectView):
             return reverse(url_name)
         except Exception:
             return fallback
-
 
 # ── Superuser / System Owner Dashboard ────────────────────────────────────
 
@@ -67,6 +74,42 @@ class SuperuserDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
         })
         return context
 
+# ── School Admin Dashboard ──────────────────────────────────────────────────
+
+class SchooladminDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
+    template_name = 'core/dashboards/schooladmin.html'
+
+    def test_func(self):
+        return self.request.user.role == 'school_admin'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        school = self.request.user.school
+        context.update({
+            'school':         school,
+            'student_count':  StudentProfile.objects.filter(school=school).count(),
+            'staff_count':    EmployeeProfile.objects.filter(school=school).count(),
+            'class_count':    ClassLevel.objects.filter(school=school).count(),
+            'subject_count':  Subject.objects.filter(school=school).count(),
+            'mark_count':     Mark.objects.filter(school=school).count(),
+            'avg_score':      Mark.objects.filter(school=school).aggregate(a=Avg('score'))['a'],
+            'classes':        ClassLevel.objects.filter(school=school).annotate(
+                                students=Count('studentprofile')
+                              ).order_by('name'),
+            'subject_avgs':   Subject.objects.filter(school=school).annotate(
+                                avg=Avg('mark__score'),
+                                total=Count('mark'),
+                              ).order_by('name'),
+            'recent_marks':   Mark.objects.filter(school=school).select_related(
+                                'student__user', 'subject', 'teacher__user'
+                              ).order_by('-id')[:10],
+            'top_students':   Mark.objects.filter(school=school).values(
+                                'student__user__first_name',
+                                'student__user__last_name',
+                                'student__admission_number',
+                              ).annotate(avg=Avg('score')).order_by('-avg')[:5],
+        })
+        return context
 
 # ── Headteacher Dashboard ──────────────────────────────────────────────────
 
