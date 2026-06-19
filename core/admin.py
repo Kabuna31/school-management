@@ -15,6 +15,7 @@ from .resources import (
     SubjectResource, MarkResource
 )
 
+
 # ── Branding ───────────────────────────────────────────────────────────────
 admin.site.site_header = '🏫 SchoolMS Administration'
 admin.site.site_title  = 'SchoolMS Admin'
@@ -158,6 +159,11 @@ class StudentProfileInline(admin.StackedInline):
                 kwargs['queryset'] = Stream.objects.filter(school=school)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+# ── Schools ───────────────────────────────────────────────────────────────────
+@admin.register(School)
+class SchoolAdmin(admin.ModelAdmin):
+    list_display = ('name',)
+    search_fields = ('name',)
 
 # ── User ───────────────────────────────────────────────────────────────────
 
@@ -199,10 +205,7 @@ class UserAdmin(
         (
             "School & Role",
             {
-                "fields": (
-                    "school",
-                    "role",
-                )
+                "fields": ("school", "role")
             },
         ),
     )
@@ -211,80 +214,49 @@ class UserAdmin(
         (
             "School & Role",
             {
-                "fields": (
-                    "school",
-                    "role",
-                )
+                "fields": ("school", "role")
             },
         ),
     )
 
+    # ── FIX 1: clean queryset (DO NOT hide system_admin)
     def get_queryset(self, request):
-
         qs = super().get_queryset(request)
 
         if self._is_scoped(request):
-
             school = self._user_school(request)
 
-            qs = qs.filter(
-                school=school
-            ).exclude(
-                is_superuser=True
-            ).exclude(
-                role="system_admin"
-            )
+            qs = qs.filter(school=school)
 
         return qs
 
-    def save_model(
-        self,
-        request,
-        obj,
-        form,
-        change
-    ):
+    # ── FIX 2: proper role ↔ superuser sync
+    def save_model(self, request, obj, form, change):
 
         if self._is_scoped(request):
-
             obj.school = request.user.school
 
+            # SYSTEM ADMIN RULE
             if obj.role == "system_admin":
-                obj.role = "teacher"
+                obj.is_superuser = True
+                obj.is_staff = True
 
-            obj.is_superuser = False
+            # ALL OTHERS
+            else:
+                obj.is_superuser = False
 
-        super().save_model(
-            request,
-            obj,
-            form,
-            change
-        )
+        super().save_model(request, obj, form, change)
 
-    def formfield_for_foreignkey(
-        self,
-        db_field,
-        request,
-        **kwargs
-    ):
+    # ── FIX 3: restrict school field safely
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
 
         school = self._user_school(request)
 
         if self._is_scoped(request):
-
             if db_field.name == "school":
+                kwargs["queryset"] = School.objects.filter(pk=school.pk)
 
-                kwargs["queryset"] = (
-                    School.objects.filter(
-                        pk=school.pk
-                    )
-                )
-
-        return super().formfield_for_foreignkey(
-            db_field,
-            request,
-            **kwargs
-        )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description="Name")
     def full_name(self, obj):
@@ -302,21 +274,8 @@ class UserAdmin(
         }
 
         return format_html(
-            """
-            <span
-            style="
-            background:{};
-            color:white;
-            padding:4px 10px;
-            border-radius:30px;
-            ">
-            {}
-            </span>
-            """,
-            colors.get(
-                obj.role,
-                "#374151"
-            ),
+            '<span style="background:{};color:white;padding:4px 10px;border-radius:30px;">{}</span>',
+            colors.get(obj.role, "#374151"),
             obj.get_role_display(),
         )
 
