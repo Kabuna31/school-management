@@ -6,13 +6,34 @@ from django.contrib.auth.models import AbstractUser
 # 1. School
 # ---------------------------------------------------------------------------
 class School(models.Model):
-    name       = models.CharField(max_length=255)
-    code       = models.CharField(max_length=20, unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    name = models.CharField(max_length=255)
+    code = models.CharField(max_length=20)
+
+    address = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
+
+    phone = models.CharField(
+        max_length=30,
+        blank=True,
+        null=True
+    )
+
+    email = models.EmailField(
+        blank=True,
+        null=True
+    )
+
+    logo = models.ImageField(
+        upload_to="school_logos/",
+        blank=True,
+        null=True
+    )
 
     def __str__(self):
         return self.name
-
 
 # ---------------------------------------------------------------------------
 # 2. User
@@ -107,6 +128,12 @@ class StudentProfile(models.Model):
     class_level      = models.ForeignKey(ClassLevel, on_delete=models.SET_NULL, null=True, blank=True)
     stream           = models.ForeignKey(Stream, on_delete=models.SET_NULL, null=True, blank=True)
     parent           = models.ManyToManyField(ParentProfile, related_name='children', blank=True)
+    passport_photo = models.ImageField(
+    upload_to='students/passports/',
+    blank=True,
+    null=True,
+    default='students/passports/default.png'
+)
 
     class Meta:
         unique_together = ('school', 'admission_number')

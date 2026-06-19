@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Academic Report Card</title>
+
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            position: relative;
+        }
+
+        /* WATERMARK */
+        .watermark {
+            position: fixed;
+            top: 30%;
+            left: 25%;
+            opacity: 0.08;
+            z-index: -1;
+        }
+
+        .watermark img {
+            width: 400px;
+        }
+
+        /* HEADER */
+        .header-wrapper {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        /* LOGO */
+        .logo img {
+            width: 90px;
+        }
+
+        /* PASSPORT */
+        .passport img {
+            width: 90px;
+            height: 110px;
+            object-fit: cover;
+            border: 1px solid #000;
+        }
+
+        .school-info {
+            text-align: center;
+            flex: 1;
+        }
+
+        .school-name {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        /* TABLE */
+        table.report {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table.report th, table.report td {
+            border: 1px solid black;
+            padding: 6px;
+            text-align: center;
+        }
+
+        table.report th {
+            background: #f2f2f2;
+        }
+
+        .footer {
+            margin-top: 20px;
+        }
+
+        .sign {
+            margin-top: 40px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .stamp {
+            margin-top: 30px;
+            font-weight: bold;
+            color: red;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- WATERMARK -->
+<div class="watermark">
+    <img src="{{ school.logo.url }}">
+</div>
+
+<!-- HEADER -->
+<div class="header-wrapper">
+
+    <!-- LEFT: LOGO -->
+    <div class="logo">
+        <img src="{{ school.logo.url }}">
+    </div>
+
+    <!-- CENTER: SCHOOL INFO -->
+    <div class="school-info">
+        <div class="school-name">{{ school.name }}</div>
+        <div>{{ school.address }}</div>
+        <div>{{ school.phone }} | {{ school.email }}</div>
+        <div class="title">ACADEMIC REPORT CARD - {{ term }}</div>
+    </div>
+
+    <!-- RIGHT: PASSPORT -->
+    <div class="passport">
+        <img src="{{ student.passport_photo.url }}">
+    </div>
+
+</div>
+
+<!-- STUDENT INFO -->
+<div style="margin-top:10px;">
+    <b>Name:</b> {{ student.user.first_name }} {{ student.user.last_name }} <br>
+    <b>Class:</b> {{ student.class_level.name }} |
+    <b>Stream:</b> {{ student.stream.name }} |
+    <b>Sex:</b> {{ student.gender }}
+</div>
+
+<!-- REPORT TABLE -->
+<table class="report">
+    <thead>
+        <tr>
+            <th>SUBJECT</th>
+            <th>AOI (20%)</th>
+            <th>EOT (80%)</th>
+            <th>FS (100%)</th>
+            <th>GRADE</th>
+            <th>LOA</th>
+            <th>TR</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for row in report %}
+        <tr>
+            <td>{{ row.subject }}</td>
+            <td>{{ row.aoi }}</td>
+            <td>{{ row.eot }}</td>
+            <td>{{ row.fs }}</td>
+            <td>{{ row.grade }}</td>
+            <td>{{ row.loa|default:"-" }}</td>
+            <td>{{ row.tr|default:"-" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- SUMMARY -->
+<div class="footer">
+    <p><b>GENERAL COMMENT:</b> {{ general_comment }}</p>
+    <p><b>GENERAL GRADE:</b> {{ general_grade }}</p>
+</div>
+
+<!-- SIGNATURES -->
+<div class="sign">
+    <div>CLASS TEACHER SIGN: ___________________</div>
+    <div>HEADTEACHER SIGN/STAMP: ___________________</div>
+</div>
+
+<div class="stamp">
+    THIS REPORT CARD IS INVALID WITHOUT OFFICIAL SCHOOL STAMP
+</div>
+
+</body>
+</html>

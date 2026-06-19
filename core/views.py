@@ -540,3 +540,80 @@ class SchoolMarkEditView(LoginRequiredMixin, UserPassesTestMixin, View):
         return redirect(
             reverse('core:school_marks') + '?success=true'
         )
+
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from xhtml2pdf import pisa
+from io import BytesIO
+from .models import StudentProfile, Mark
+
+
+def get_grade(score):
+    if score >= 80:
+        return "A"
+    elif score >= 70:
+        return "B"
+    elif score >= 60:
+        return "C"
+    elif score >= 50:
+        return "D"
+    return "E"
+
+
+def build_student_report(student):
+    marks = Mark.objects.filter(
+        student=student
+    ).select_related("subject")
+
+    rows = []
+
+    for mark in marks:
+        rows.append({
+            "subject": mark.subject.name,
+            "fs": mark.score,
+            "grade": get_grade(mark.score),
+        })
+
+    return rows
+
+
+def student_report_pdf(request, student_id):
+
+    student = StudentProfile.objects.get(id=student_id)
+
+    report = build_student_report(student)
+
+    html = render_to_string(
+        "report_card.html",
+        {
+            "student": student,
+            "school": student.school,
+            "report": report,
+            "term": "Term 1",
+        }
+    )
+
+    pdf = BytesIO()
+
+    pisa.CreatePDF(
+        html,
+        dest=pdf
+    )
+
+    response = HttpResponse(
+        pdf.getvalue(),
+        content_type="application/pdf"
+    )
+
+    response["Content-Disposition"] = (
+        f'attachment; filename="report_{student.id}.pdf"'
+    )
+
+    return response
+
+def class_reports_zip(request, class_id):
+    return HttpResponse(
+        "Bulk reports coming next"
+    )
+
+

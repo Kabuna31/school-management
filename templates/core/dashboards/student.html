@@ -13,6 +13,7 @@
     <div class="label">Admission No.</div>
     <div class="value" style="font-size:1.2rem;padding-top:.3rem;">{{ profile.admission_number }}</div>
   </div>
+
   <div class="stat-card">
     <div class="label">Subjects Taken</div>
     <div class="value">{{ mark_count }}</div>
@@ -27,6 +28,19 @@
       {% if best_subject %}{{ best_subject.subject__name }}{% else %}—{% endif %}
     </div>
   </div>
+</div>
+<!-- REPORT CARD -->
+<div class="card">
+  <div class="card-title">Academic Report Card</div>
+
+  <p style="color:var(--muted);margin-bottom:1rem;">
+      Download your official report card in PDF format.
+  </p>
+
+  <a href="{% url 'student_report_pdf' profile.id %}"
+     class="btn btn-primary">
+      📄 View / Download Report
+  </a>
 </div>
 
 <!-- Term averages -->

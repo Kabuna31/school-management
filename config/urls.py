@@ -1,4 +1,6 @@
 from django.contrib import admin
+from core.views import student_report_pdf
+from core.views import class_reports_zip
 from django.urls import path, include
 from django.http import HttpResponse
 import traceback
@@ -25,4 +27,10 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include('django.contrib.auth.urls')),
     path('', include('core.urls', namespace='core')),
+    path("reports/student/<int:student_id>/",student_report_pdf,name="student_report"),
+    path("reports/class/<int:class_id>/",class_reports_zip,name="class_reports"),
+
+
 ]
+
+
