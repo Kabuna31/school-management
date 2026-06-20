@@ -3,24 +3,22 @@ services:
     name: school-management-system
     env: python
     buildCommand: |
-      echo "=== Installing dependencies ==="
       pip install --upgrade pip
       pip install -r requirements.txt
-      
-      echo "=== Collecting static files ==="
       python manage.py collectstatic --noinput
-      
-      echo "=== Running migrations ==="
       python manage.py makemigrations
       python manage.py migrate --verbosity 3
-      
-      echo "=== Checking migration status ==="
-      python manage.py showmigrations
-      
-      echo "=== Creating superuser ==="
-      echo "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser('admin', 'admin@school.com', 'admin123456') if not User.objects.filter(username='admin').exists() else None" | python manage.py shell
-      
-      echo "=== Build completed successfully ==="
+      echo "Creating superuser..."
+      python manage.py shell << EOF
+from django.contrib.auth import get_user_model
+User = get_user_model()
+if not User.objects.filter(username='admin').exists():
+    User.objects.create_superuser('Admin', 'kabunaivan@gmail.com', 'admin123')
+    print("✅ Superuser created successfully!")
+else:
+    print("✅ Superuser already exists")
+EOF
+      echo "Superuser creation complete"
     startCommand: gunicorn config.wsgi:application
     envVars:
       - key: DJANGO_SECRET_KEY
@@ -33,8 +31,6 @@ services:
           property: connectionString
       - key: ALLOWED_HOSTS
         value: "school-management-system.onrender.com,.onrender.com,localhost,127.0.0.1"
-      - key: PYTHON_VERSION
-        value: "3.11.0"
 
 databases:
   - name: school_db
