@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,7 +11,6 @@
 </head>
 <body class="bg-gray-50">
     {% if user.is_authenticated %}
-    <!-- Navigation - Only show when logged in -->
     <nav class="bg-white shadow-lg border-b border-gray-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
@@ -28,7 +28,7 @@
                             {{ request.user.get_role_display }}
                         </span>
                     </span>
-                    <form method="post" action="{% url 'logout' %}" class="inline">
+                    <form method="post" action="/accounts/logout/" class="inline">
                         {% csrf_token %}
                         <button type="submit" class="text-red-600 hover:text-red-800 text-sm font-medium">
                             <i class="fas fa-sign-out-alt mr-1"></i> Logout
@@ -38,10 +38,7 @@
             </div>
         </div>
     </nav>
-
-    <!-- Sidebar & Main Content -->
     <div class="flex">
-        <!-- Sidebar -->
         {% block sidebar %}
         <div class="w-64 bg-white shadow-lg min-h-screen border-r border-gray-200">
             <div class="p-4">
@@ -80,13 +77,10 @@
             </div>
         </div>
         {% endblock %}
-
         <div class="flex-1 p-6">
     {% else %}
-        <!-- Show nothing for unauthenticated users -->
         <div class="flex-1">
     {% endif %}
-
         {% if messages %}
             {% for message in messages %}
                 <div class="mb-4 p-4 rounded-lg {% if message.tags == 'success' %}bg-green-100 text-green-700{% elif message.tags == 'error' %}bg-red-100 text-red-700{% else %}bg-blue-100 text-blue-700{% endif %}">
@@ -94,18 +88,14 @@
                 </div>
             {% endfor %}
         {% endif %}
-        
         {% block content %}{% endblock %}
         </div>
     </div>
-
     {% if user.is_authenticated %}
-    <!-- Footer -->
     <footer class="bg-white border-t border-gray-200 py-4 text-center text-sm text-gray-600">
         &copy; {% now "Y" %} School Management System. All rights reserved.
     </footer>
     {% endif %}
-
     {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -1,54 +1,51 @@
-{% extends "core/base.html" %}
+{% extends 'base.html' %}
+
 {% block title %}Edit Mark{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>✏️ Edit Mark</h1>
-  <p>{{ request.user.school.name }}</p>
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">Edit Mark</h1>
+    <p class="text-gray-600">Update student mark</p>
 </div>
 
-<div class="card" style="max-width:480px;">
-  <div class="card-title">Mark Details</div>
-
-  <!-- Read-only info -->
-  <table style="margin-bottom:1.5rem;font-size:.9rem;width:100%;">
-    <tr><td style="color:var(--muted);padding:.4rem 0;width:130px;">Student</td>
-        <td><strong>{{ mark.student.user.get_full_name }}</strong></td></tr>
-    <tr><td style="color:var(--muted);padding:.4rem 0;">Admission No.</td>
-        <td>{{ mark.student.admission_number }}</td></tr>
-    <tr><td style="color:var(--muted);padding:.4rem 0;">Class</td>
-        <td>{{ mark.student.class_level.name|default:"—" }} — {{ mark.student.stream.name|default:"—" }}</td></tr>
-    <tr><td style="color:var(--muted);padding:.4rem 0;">Subject</td>
-        <td>{{ mark.subject.name }}</td></tr>
-    <tr><td style="color:var(--muted);padding:.4rem 0;">Term</td>
-        <td><span class="badge badge-blue">{{ mark.term }}</span></td></tr>
-    <tr><td style="color:var(--muted);padding:.4rem 0;">Current Score</td>
-        <td>
-          <strong>{{ mark.score }}</strong>
-          {% if mark.score >= 80 %}<span class="badge badge-green" style="margin-left:.5rem;">A</span>
-          {% elif mark.score >= 65 %}<span class="badge badge-blue" style="margin-left:.5rem;">B</span>
-          {% elif mark.score >= 50 %}<span class="badge badge-yellow" style="margin-left:.5rem;">C</span>
-          {% else %}<span class="badge badge-red" style="margin-left:.5rem;">F</span>{% endif %}
-        </td></tr>
-    <tr><td style="color:var(--muted);padding:.4rem 0;">Teacher</td>
-        <td>{{ mark.teacher.user.get_full_name|default:"—" }}</td></tr>
-  </table>
-
-  <!-- Edit form -->
-  <form method="post" action="{% url 'core:school_mark_edit' mark.pk %}">
-    {% csrf_token %}
-    <div class="form-group" style="margin-bottom:1rem;">
-      <label for="score">New Score (0 – 100)</label>
-      <input type="number" id="score" name="score"
-        min="0" max="100" step="0.5"
-        value="{{ mark.score }}"
-        style="max-width:160px;"
-        required>
+<div class="bg-white rounded-lg shadow-md p-6 max-w-md mx-auto">
+    <div class="mb-4">
+        <p><span class="font-semibold">Student:</span> {{ mark.student.user.get_full_name }}</p>
+        <p><span class="font-semibold">Subject:</span> {{ mark.subject.name }}</p>
+        <p><span class="font-semibold">Term:</span> {{ mark.term }}</p>
+        <p><span class="font-semibold">Exam:</span> {{ mark.exam }}</p>
+        <p><span class="font-semibold">Current Score:</span> 
+            {% if mark.exam == 'Mid Term' %}
+                {{ mark.mid_term|floatformat:1 }}
+            {% else %}
+                {{ mark.end_term|floatformat:1 }}
+            {% endif %}
+        </p>
+        <p><span class="font-semibold">Max Score:</span> 
+            {% if mark.exam == 'Mid Term' %}20{% else %}80{% endif %}
+        </p>
     </div>
-    <div style="display:flex;gap:.75rem;">
-      <button type="submit" class="btn btn-primary">💾 Save</button>
-      <a href="{% url 'core:school_marks' %}" class="btn btn-secondary">Cancel</a>
-    </div>
-  </form>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">New Score</label>
+            <input type="number" 
+                   name="mark_value" 
+                   class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200"
+                   step="0.5"
+                   min="0"
+                   max="{% if mark.exam == 'Mid Term' %}20{% else %}80{% endif %}"
+                   required>
+        </div>
+        <div class="flex space-x-2">
+            <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+                <i class="fas fa-save mr-2"></i> Update
+            </button>
+            <a href="{% url 'core:school_marks' %}" class="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition">
+                Cancel
+            </a>
+        </div>
+    </form>
 </div>
 {% endblock %}

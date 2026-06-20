@@ -6,34 +6,16 @@ from django.contrib.auth.models import AbstractUser
 # 1. School
 # ---------------------------------------------------------------------------
 class School(models.Model):
-    name = models.CharField(max_length=255)
-    code = models.CharField(max_length=20)
-
-    address = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True
-    )
-
-    phone = models.CharField(
-        max_length=30,
-        blank=True,
-        null=True
-    )
-
-    email = models.EmailField(
-        blank=True,
-        null=True
-    )
-
-    logo = models.ImageField(
-        upload_to="school_logos/",
-        blank=True,
-        null=True
-    )
+    name    = models.CharField(max_length=255)
+    code    = models.CharField(max_length=20)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    phone   = models.CharField(max_length=30,  blank=True, null=True)
+    email   = models.EmailField(blank=True, null=True)
+    logo    = models.ImageField(upload_to="school_logos/", blank=True, null=True)
 
     def __str__(self):
         return self.name
+
 
 # ---------------------------------------------------------------------------
 # 2. User
@@ -42,16 +24,39 @@ ROLE_CHOICES = (
     ('system_admin',   'System Admin'),
     ('school_admin',   'School System Administrator'),
     ('headteacher',    'Headteacher'),
+    ('dos',            'Director of Studies'),
     ('bursar',         'School Bursar'),
     ('nurse',          'School Nurse'),
     ('librarian',      'School Librarian'),
     ('lab_technician', 'Lab Technician'),
-    ('dos',            'Director of Studies'),
     ('class_teacher',  'Class Teacher'),
     ('teacher',        'Teacher'),
     ('parent',         'Parent'),
     ('student',        'Student'),
 )
+
+# Roles that are scoped to their own school (used by admin + views)
+SCOPED_ROLES = [
+    'school_admin', 'headteacher', 'dos', 'bursar',
+    'nurse', 'librarian', 'lab_technician', 'class_teacher',
+]
+
+# Roles that can enter / edit marks
+MARK_ENTRY_ROLES = [
+    'system_admin', 'school_admin', 'headteacher',
+    'dos', 'teacher', 'class_teacher',
+]
+
+# Roles that can manage (view/edit/delete) all school marks
+MARK_MANAGE_ROLES = ['school_admin', 'headteacher']
+
+# Roles that have a dedicated dashboard (others fall back to /admin/)
+DASHBOARD_ROLES = [
+    'system_admin', 'school_admin', 'headteacher', 'dos',
+    'bursar', 'teacher', 'class_teacher', 'student', 'parent',
+    'nurse', 'librarian', 'lab_technician',
+]
+
 
 class User(AbstractUser):
     school = models.ForeignKey(
@@ -65,6 +70,11 @@ class User(AbstractUser):
     @property
     def is_system_admin(self):
         return self.role == 'system_admin' or self.is_superuser
+
+    @property
+    def is_scoped_role(self):
+        """True for roles that should only see their own school's data."""
+        return self.role in SCOPED_ROLES
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +120,8 @@ class ClassLevel(models.Model):
     school        = models.ForeignKey(School, on_delete=models.CASCADE)
     name          = models.CharField(max_length=50)
     class_teacher = models.ForeignKey(
-        EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True
+        EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='class_teacher_of',
     )
 
     class Meta:
@@ -126,14 +137,14 @@ class StudentProfile(models.Model):
     admission_number = models.CharField(max_length=20)
     gender           = models.CharField(max_length=1, choices=[('M', 'Male'), ('F', 'Female')])
     class_level      = models.ForeignKey(ClassLevel, on_delete=models.SET_NULL, null=True, blank=True)
-    stream           = models.ForeignKey(Stream, on_delete=models.SET_NULL, null=True, blank=True)
+    stream           = models.ForeignKey(Stream,     on_delete=models.SET_NULL, null=True, blank=True)
     parent           = models.ManyToManyField(ParentProfile, related_name='children', blank=True)
-    passport_photo = models.ImageField(
-    upload_to='students/passports/',
-    blank=True,
-    null=True,
-    default='students/passports/default.png'
-)
+    passport_photo   = models.ImageField(
+        upload_to='students/passports/',
+        blank=True,
+        null=True,
+        default='students/passports/default.png',
+    )
 
     class Meta:
         unique_together = ('school', 'admission_number')
@@ -157,50 +168,78 @@ class Subject(models.Model):
         return f"{self.name} ({self.code})"
 
 
-# 6 exam slots per year
-EXAM_CHOICES = [
-    ('T1_Mid', 'Term 1 — Mid Term'),
-    ('T1_End', 'Term 1 — End of Term'),
-    ('T2_Mid', 'Term 2 — Mid Term'),
-    ('T2_End', 'Term 2 — End of Term'),
-    ('T3_Mid', 'Term 3 — Mid Term'),
-    ('T3_End', 'Term 3 — End of Term'),
+# Term choices — stored directly on Mark so views can filter by DB field
+TERM_CHOICES = [
+    ('Term 1', 'Term 1'),
+    ('Term 2', 'Term 2'),
+    ('Term 3', 'Term 3'),
 ]
 
-# Map exam → parent term (for grouping in report cards)
-EXAM_TERM_MAP = {
-    'T1_Mid': 'Term 1', 'T1_End': 'Term 1',
-    'T2_Mid': 'Term 2', 'T2_End': 'Term 2',
-    'T3_Mid': 'Term 3', 'T3_End': 'Term 3',
+# Exam slot choices within a term
+EXAM_CHOICES = [
+    ('Mid Term', 'Mid Term'),
+    ('End of Term', 'End of Term'),
+]
+
+# Combined label used in __str__ and displays
+EXAM_LABEL_MAP = {
+    ('Term 1', 'Mid Term'):    'Term 1 — Mid Term',
+    ('Term 1', 'End of Term'): 'Term 1 — End of Term',
+    ('Term 2', 'Mid Term'):    'Term 2 — Mid Term',
+    ('Term 2', 'End of Term'): 'Term 2 — End of Term',
+    ('Term 3', 'Mid Term'):    'Term 3 — Mid Term',
+    ('Term 3', 'End of Term'): 'Term 3 — End of Term',
 }
 
+
 class Mark(models.Model):
-    school   = models.ForeignKey(School,         on_delete=models.CASCADE)
-    student  = models.ForeignKey(StudentProfile, on_delete=models.CASCADE)
-    subject  = models.ForeignKey(Subject,        on_delete=models.CASCADE)
-    teacher  = models.ForeignKey(
+    school  = models.ForeignKey(School,         on_delete=models.CASCADE)
+    student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE)
+    subject = models.ForeignKey(Subject,        on_delete=models.CASCADE)
+    teacher = models.ForeignKey(
         EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True
     )
-    exam     = models.CharField(max_length=10, choices=EXAM_CHOICES)
-    score    = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    # Stored as DB fields so views can filter/annotate on them
+    term    = models.CharField(max_length=10, choices=TERM_CHOICES)
+    exam    = models.CharField(max_length=15, choices=EXAM_CHOICES)
+
+    # Two score columns: mid-term and end-of-term within the same record
+    mid_term = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    end_term = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
 
     class Meta:
-        unique_together = ('school', 'student', 'subject', 'exam')
+        # One record per student/subject/term/exam slot
+        unique_together = ('school', 'student', 'subject', 'term', 'exam')
 
     def __str__(self):
-        return f"{self.student} — {self.subject} {self.get_exam_display()}: {self.score}"
+        label = EXAM_LABEL_MAP.get((self.term, self.exam), f"{self.term} {self.exam}")
+        return f"{self.student} — {self.subject} {label}"
+
+    # ------------------------------------------------------------------
+    # Computed helpers (read-only; not stored)
+    # ------------------------------------------------------------------
+    @property
+    def total_score(self):
+        """Combined score used for grading."""
+        return float(self.mid_term or 0) + float(self.end_term or 0)
 
     @property
     def grade(self):
-        s = float(self.score)
-        if s >= 80: return 'A'
-        if s >= 65: return 'B'
-        if s >= 50: return 'C'
+        t = self.total_score
+        if t >= 80: return 'A'
+        if t >= 65: return 'B'
+        if t >= 50: return 'C'
         return 'F'
 
     @property
-    def term(self):
-        return EXAM_TERM_MAP.get(self.exam, '')
+    def grade_points(self):
+        """Uganda-style grade points for report card aggregation."""
+        t = self.total_score
+        if t >= 80: return 5
+        if t >= 70: return 4
+        if t >= 60: return 3
+        if t >= 50: return 2
+        return 1
 
 
 # ---------------------------------------------------------------------------
@@ -211,19 +250,24 @@ DAY_CHOICES = [
     ('Thu', 'Thursday'), ('Fri', 'Friday'),
 ]
 
+
 class Timetable(models.Model):
-    school      = models.ForeignKey(School,         on_delete=models.CASCADE)
-    class_level = models.ForeignKey(ClassLevel,     on_delete=models.CASCADE)
-    stream      = models.ForeignKey(Stream,         on_delete=models.SET_NULL, null=True, blank=True)
-    subject     = models.ForeignKey(Subject,        on_delete=models.CASCADE)
-    teacher     = models.ForeignKey(EmployeeProfile,on_delete=models.SET_NULL, null=True, blank=True)
+    school      = models.ForeignKey(School,          on_delete=models.CASCADE)
+    class_level = models.ForeignKey(ClassLevel,      on_delete=models.CASCADE)
+    stream      = models.ForeignKey(Stream,          on_delete=models.SET_NULL, null=True, blank=True)
+    subject     = models.ForeignKey(Subject,         on_delete=models.CASCADE)
+    teacher     = models.ForeignKey(EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True)
     day         = models.CharField(max_length=3, choices=DAY_CHOICES)
     start_time  = models.TimeField()
     end_time    = models.TimeField()
     room        = models.CharField(max_length=50, blank=True)
 
     class Meta:
-        ordering = ['day', 'start_time']
+        ordering        = ['day', 'start_time']
+        unique_together = ('school', 'class_level', 'stream', 'subject', 'day', 'start_time')
 
     def __str__(self):
-        return f"{self.class_level} {self.get_day_display()} {self.start_time}–{self.end_time} {self.subject}"
+        return (
+            f"{self.class_level} {self.get_day_display()} "
+            f"{self.start_time}–{self.end_time} {self.subject}"
+        )

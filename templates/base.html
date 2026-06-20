@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}School Management System{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-50">
+    {% if user.is_authenticated %}
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="{% url 'core:role_redirect' %}" class="flex items-center">
+                        <i class="fas fa-school text-blue-600 text-2xl mr-2"></i>
+                        <span class="text-xl font-bold text-gray-800">SchoolMS</span>
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm text-gray-600">
+                        <i class="fas fa-user mr-1"></i>
+                        {{ request.user.get_full_name|default:request.user.username }}
+                        <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full ml-1">
+                            {{ request.user.get_role_display }}
+                        </span>
+                    </span>
+                    <form method="post" action="{% url 'logout' %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit" class="text-red-600 hover:text-red-800 text-sm font-medium">
+                            <i class="fas fa-sign-out-alt mr-1"></i> Logout
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar & Main Content -->
+    <div class="flex">
+        <!-- Sidebar -->
+        {% block sidebar %}
+        <div class="w-64 bg-white shadow-lg min-h-screen border-r border-gray-200">
+            <div class="p-4">
+                <div class="space-y-2">
+                    <!-- Dashboard -->
+                    <a href="{% url 'core:role_redirect' %}" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-home w-5"></i>
+                        <span class="ml-3">Dashboard</span>
+                    </a>
+
+                    <!-- Reports Section -->
+                    <div class="pt-2 mt-2 border-t border-gray-200">
+                        <p class="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Reports</p>
+                    </div>
+
+                    {% if request.user.role in 'system_admin,school_admin,headteacher,dos' %}
+                    <a href="{% url 'core:analytics' %}" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-chart-pie w-5"></i>
+                        <span class="ml-3">Analytics</span>
+                    </a>
+                    <a href="{% url 'core:term_report' 'Term 1' %}" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-calendar-alt w-5"></i>
+                        <span class="ml-3">Term Reports</span>
+                    </a>
+                    {% endif %}
+
+                    {% if request.user.role == 'student' %}
+                    <a href="{% url 'core:my_marksheet' %}" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-file-alt w-5"></i>
+                        <span class="ml-3">My Marksheet</span>
+                    </a>
+                    <a href="{% url 'core:my_reports' %}" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-chart-line w-5"></i>
+                        <span class="ml-3">My Performance</span>
+                    </a>
+                    {% endif %}
+
+                    {% if request.user.role == 'parent' %}
+                    <a href="{% url 'core:parent_dashboard' %}" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-child w-5"></i>
+                        <span class="ml-3">My Children</span>
+                    </a>
+                    {% endif %}
+
+                    <!-- Management Section -->
+                    <div class="pt-2 mt-2 border-t border-gray-200">
+                        <p class="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Management</p>
+                    </div>
+
+                    {% if request.user.role in 'system_admin,school_admin,headteacher,dos' %}
+                    <a href="{% url 'core:school_marks' %}" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-chart-bar w-5"></i>
+                        <span class="ml-3">All Marks</span>
+                    </a>
+                    <a href="{% url 'core:teacher_mark_entry' %}" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-pen w-5"></i>
+                        <span class="ml-3">Enter Marks</span>
+                    </a>
+                    {% endif %}
+
+                    {% if request.user.role in 'teacher,class_teacher' %}
+                    <a href="{% url 'core:teacher_mark_entry' %}" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-pen w-5"></i>
+                        <span class="ml-3">Enter Marks</span>
+                    </a>
+                    {% endif %}
+
+                    <!-- Admin Panel -->
+                    <div class="pt-2 mt-2 border-t border-gray-200">
+                        <a href="/admin/" class="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">
+                            <i class="fas fa-cog w-5"></i>
+                            <span class="ml-3">Admin Panel</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endblock %}
+
+        <div class="flex-1 p-6">
+    {% else %}
+        <div class="flex-1">
+    {% endif %}
+
+        <!-- Messages -->
+        {% if messages %}
+            {% for message in messages %}
+                <div class="mb-4 p-4 rounded-lg {% if message.tags == 'success' %}bg-green-100 text-green-700{% elif message.tags == 'error' %}bg-red-100 text-red-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <!-- Content -->
+        {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    {% if user.is_authenticated %}
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 py-4 text-center text-sm text-gray-600">
+        &copy; {% now "Y" %} School Management System. All rights reserved.
+    </footer>
+    {% endif %}
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

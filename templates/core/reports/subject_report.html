@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Subject Performance Report{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">Subject Performance Report</h1>
+    <p class="text-gray-600">{{ subject.name }} ({{ subject.code }})</p>
+</div>
+
+{% if report %}
+<div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="text-center p-4 bg-blue-50 rounded-lg">
+            <p class="text-sm text-gray-600">Total Students</p>
+            <p class="text-2xl font-bold text-blue-600">{{ report.total_students }}</p>
+        </div>
+        <div class="text-center p-4 bg-green-50 rounded-lg">
+            <p class="text-sm text-gray-600">Overall Average</p>
+            <p class="text-2xl font-bold text-green-600">{{ report.overall_average|floatformat:1 }}%</p>
+        </div>
+        <div class="text-center p-4 bg-purple-50 rounded-lg">
+            <p class="text-sm text-gray-600">Highest Score</p>
+            <p class="text-2xl font-bold text-purple-600">{{ report.highest.total_score|floatformat:1 }}</p>
+        </div>
+        <div class="text-center p-4 bg-yellow-50 rounded-lg">
+            <p class="text-sm text-gray-600">Lowest Score</p>
+            <p class="text-2xl font-bold text-yellow-600">{{ report.lowest.total_score|floatformat:1 }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <h2 class="text-xl font-bold text-gray-800 mb-4">Class Performance</h2>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Class</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Students</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Average</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for class in report.class_stats %}
+                <tr class="border-t hover:bg-gray-50">
+                    <td class="px-4 py-2 text-sm font-medium">{{ class.class_name }}</td>
+                    <td class="px-4 py-2 text-sm">{{ class.students }}</td>
+                    <td class="px-4 py-2 text-sm">{{ class.average|floatformat:1 }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <h2 class="text-xl font-bold text-gray-800 mb-4">Grade Distribution</h2>
+    <div class="grid grid-cols-5 gap-4">
+        {% for grade, data in report.grade_distribution.items %}
+        <div class="text-center p-4 border rounded-lg">
+            <p class="text-3xl font-bold 
+                {% if grade == 'A' %}text-green-600
+                {% elif grade == 'B' %}text-blue-600
+                {% elif grade == 'C' %}text-yellow-600
+                {% elif grade == 'D' %}text-orange-600
+                {% else %}text-red-600{% endif %}">
+                {{ grade }}
+            </p>
+            <p class="text-sm text-gray-600">{{ data.count }} students</p>
+            <p class="text-xs text-gray-500">{{ data.percentage|floatformat:1 }}%</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="mt-6 flex space-x-4">
+    <button onclick="window.print()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition">
+        <i class="fas fa-print mr-2"></i> Print Report
+    </button>
+    <a href="{% url 'core:subject_report_pdf' subject.pk %}" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition">
+        <i class="fas fa-file-pdf mr-2"></i> Download PDF
+    </a>
+    <a href="{% url 'core:subject_report_json' subject.pk %}" class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition">
+        <i class="fas fa-file-json mr-2"></i> Export JSON
+    </a>
+</div>
+{% else %}
+<div class="bg-yellow-50 border border-yellow-400 text-yellow-700 px-4 py-3 rounded">
+    <strong>No data found!</strong> No marks available for this subject.
+</div>
+{% endif %}
+{% endblock %}

@@ -1,247 +1,131 @@
-"""
-core/resources.py
-
-Import/Export resource definitions for all major models.
-Uses django-import-export (already in requirements.txt).
-"""
+# core/resources.py
 from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
-from import_export import resources, fields
-
+from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from .models import (
     School, User, EmployeeProfile, ParentProfile,
-    Stream, ClassLevel, StudentProfile, Subject, Mark
+    Stream, ClassLevel, StudentProfile, Subject, Mark, Timetable
 )
 
 
-# ── School ─────────────────────────────────────────────────────────────────
+class UserResource(resources.ModelResource):
+    """User resource with password hashing on import"""
+    
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'password', 'email', 'first_name', 'last_name', 
+                 'role', 'school', 'is_active', 'is_staff', 'is_superuser')
+        export_order = ('id', 'username', 'email', 'first_name', 'last_name', 
+                       'role', 'school', 'is_active')
+        import_id_fields = ('id', 'username')
+    
+    def before_import(self, dataset, **kwargs):
+        """Process the dataset before import"""
+        # Check if password column exists
+        if 'password' in dataset.headers:
+            # Show warning that passwords will be hashed
+            print("⚠ Passwords will be hashed during import.")
+        return dataset
+    
+    def before_import_row(self, row, **kwargs):
+        """Hash password before importing each row"""
+        # Only hash if password is provided and not already hashed
+        if 'password' in row and row['password']:
+            password = row['password']
+            
+            # Check if password is already hashed (starts with pbkdf2_sha256)
+            if not password.startswith('pbkdf2_sha256'):
+                try:
+                    # Hash the password
+                    row['password'] = make_password(password)
+                except Exception as e:
+                    print(f"⚠ Error hashing password for user: {row.get('username', 'Unknown')} - {e}")
+                    # If hashing fails, set a default password
+                    row['password'] = make_password('default123')
+        
+        return row
+    
+    def after_import_row(self, row, row_result, **kwargs):
+        """Log import results"""
+        if row_result.errors:
+            print(f"⚠ Error importing row: {row.get('username', 'Unknown')}")
+        else:
+            print(f"✓ Imported: {row.get('username', 'Unknown')}")
+        return row
+    
+    def export_resource_class(self):
+        """Export without password field for security"""
+        class UserExportResource(UserResource):
+            class Meta(UserResource.Meta):
+                # Exclude password and sensitive fields from export
+                exclude = ('password', 'is_superuser')
+                fields = ('id', 'username', 'email', 'first_name', 'last_name', 
+                         'role', 'school', 'is_active', 'is_staff', 'date_joined')
+                export_order = ('id', 'username', 'email', 'first_name', 'last_name', 
+                               'role', 'school', 'is_active', 'is_staff', 'date_joined')
+        return UserExportResource
+
 
 class SchoolResource(resources.ModelResource):
     class Meta:
-        model  = School
-        fields = ('id', 'name', 'code', 'created_at')
-        export_order = ('id', 'name', 'code', 'created_at')
-        import_id_fields = ('code',)  # use code as natural key
-
-
-# ── User ───────────────────────────────────────────────────────────────────
-
-
-class UserResource(resources.ModelResource):
-
-    school = fields.Field(
-        column_name="school",
-        attribute="school",
-        widget=ForeignKeyWidget(
-            School,
-            field="code"
-        )
-    )
-
-    class Meta:
-        model = User
-
-        fields = (
-            "username",
-            "first_name",
-            "last_name",
-            "email",
-            "role",
-            "school",
-            "is_active",
-        )
-
+        model = School
+        fields = ('id', 'name', 'code', 'address', 'phone', 'email')
         export_order = fields
-        import_id_fields = ("username",)
 
-    def before_import_row(self, row, **kwargs):
-
-        school_code = row.get("school")
-
-        if school_code:
-            School.objects.get_or_create(
-                code=school_code,
-                defaults={
-                    "name": school_code
-                }
-            )
-
-    def after_save_instance(
-        self,
-        instance,
-        row,
-        **kwargs
-    ):
-        """
-        Password = username
-        """
-
-        if row.get("username"):
-
-            instance.set_password(
-                row["username"]
-            )
-
-            instance.save()
-# ── EmployeeProfile ────────────────────────────────────────────────────────
 
 class EmployeeProfileResource(resources.ModelResource):
-    username  = fields.Field(column_name='username',  attribute='user__username')
-    full_name = fields.Field(column_name='full_name', attribute='user__get_full_name')
-    school    = fields.Field(
-        column_name='school',
-        attribute='school',
-        widget=ForeignKeyWidget(School, field='code')
-    )
-    user = fields.Field(
-        column_name='user',
-        attribute='user',
-        widget=ForeignKeyWidget(User, field='username')
-    )
-
     class Meta:
-        model  = EmployeeProfile
-        fields = ('user', 'username', 'full_name', 'school', 'staff_id', 'hire_date')
-        export_order = ('user', 'username', 'full_name', 'school', 'staff_id', 'hire_date')
-        import_id_fields = ('user',)
+        model = EmployeeProfile
+        fields = ('id', 'user', 'staff_id', 'hire_date', 'school')
+        export_order = fields
 
 
-# ── Stream ─────────────────────────────────────────────────────────────────
+class ParentProfileResource(resources.ModelResource):
+    class Meta:
+        model = ParentProfile
+        fields = ('id', 'user', 'phone_number', 'school')
+        export_order = fields
+
 
 class StreamResource(resources.ModelResource):
-    school = fields.Field(
-        column_name='school',
-        attribute='school',
-        widget=ForeignKeyWidget(School, field='code')
-    )
-
     class Meta:
-        model  = Stream
+        model = Stream
         fields = ('id', 'name', 'school')
-        export_order = ('id', 'school', 'name')
-        import_id_fields = ('id',)
+        export_order = fields
 
-
-# ── ClassLevel ─────────────────────────────────────────────────────────────
 
 class ClassLevelResource(resources.ModelResource):
-    school = fields.Field(
-        column_name='school',
-        attribute='school',
-        widget=ForeignKeyWidget(School, field='code')
-    )
-    class_teacher = fields.Field(
-        column_name='class_teacher',
-        attribute='class_teacher',
-        widget=ForeignKeyWidget(EmployeeProfile, field='staff_id')
-    )
-
     class Meta:
-        model  = ClassLevel
+        model = ClassLevel
         fields = ('id', 'name', 'school', 'class_teacher')
-        export_order = ('id', 'school', 'name', 'class_teacher')
-        import_id_fields = ('id',)
+        export_order = fields
 
-
-# ── StudentProfile ─────────────────────────────────────────────────────────
 
 class StudentProfileResource(resources.ModelResource):
-    username   = fields.Field(column_name='username',   attribute='user__username')
-    first_name = fields.Field(column_name='first_name', attribute='user__first_name')
-    last_name  = fields.Field(column_name='last_name',  attribute='user__last_name')
-    email      = fields.Field(column_name='email',      attribute='user__email')
-
-    school = fields.Field(
-        column_name='school',
-        attribute='school',
-        widget=ForeignKeyWidget(School, field='code')
-    )
-    user = fields.Field(
-        column_name='user',
-        attribute='user',
-        widget=ForeignKeyWidget(User, field='username')
-    )
-    class_level = fields.Field(
-        column_name='class_level',
-        attribute='class_level',
-        widget=ForeignKeyWidget(ClassLevel, field='name')
-    )
-    stream = fields.Field(
-        column_name='stream',
-        attribute='stream',
-        widget=ForeignKeyWidget(Stream, field='name')
-    )
-
     class Meta:
-        model  = StudentProfile
-        fields = (
-            'user', 'username', 'first_name', 'last_name', 'email',
-            'school', 'admission_number', 'gender', 'class_level', 'stream'
-        )
-        export_order = (
-            'user', 'username', 'first_name', 'last_name', 'email',
-            'school', 'admission_number', 'gender', 'class_level', 'stream'
-        )
-        import_id_fields = ('user',)
+        model = StudentProfile
+        fields = ('id', 'user', 'admission_number', 'gender', 'class_level', 'stream', 'school')
+        export_order = fields
 
-
-# ── Subject ────────────────────────────────────────────────────────────────
 
 class SubjectResource(resources.ModelResource):
-    school = fields.Field(
-        column_name='school',
-        attribute='school',
-        widget=ForeignKeyWidget(School, field='code')
-    )
-
     class Meta:
-        model  = Subject
+        model = Subject
         fields = ('id', 'name', 'code', 'school')
-        export_order = ('id', 'school', 'name', 'code')
-        import_id_fields = ('id',)
+        export_order = fields
 
-
-# ── Mark ───────────────────────────────────────────────────────────────────
 
 class MarkResource(resources.ModelResource):
-    student_name     = fields.Field(column_name='student_name',     attribute='student__user__get_full_name')
-    admission_number = fields.Field(column_name='admission_number', attribute='student__admission_number')
-    subject_name     = fields.Field(column_name='subject_name',     attribute='subject__name')
-    teacher_name     = fields.Field(column_name='teacher_name',     attribute='teacher__user__get_full_name')
-    class_level      = fields.Field(column_name='class_level',      attribute='student__class_level__name')
-    stream           = fields.Field(column_name='stream',           attribute='student__stream__name')
-
-    school = fields.Field(
-        column_name='school',
-        attribute='school',
-        widget=ForeignKeyWidget(School, field='code')
-    )
-    student = fields.Field(
-        column_name='student',
-        attribute='student',
-        widget=ForeignKeyWidget(StudentProfile, field='admission_number')
-    )
-    subject = fields.Field(
-        column_name='subject',
-        attribute='subject',
-        widget=ForeignKeyWidget(Subject, field='code')
-    )
-    teacher = fields.Field(
-        column_name='teacher',
-        attribute='teacher',
-        widget=ForeignKeyWidget(EmployeeProfile, field='staff_id')
-    )
-
     class Meta:
-        model  = Mark
-        fields = (
-            'id', 'school', 'student', 'admission_number', 'student_name',
-            'class_level', 'stream', 'subject', 'subject_name',
-            'term', 'score', 'teacher', 'teacher_name'
-        )
-        export_order = (
-            'id', 'school', 'student', 'admission_number', 'student_name',
-            'class_level', 'stream', 'subject', 'subject_name',
-            'term', 'score', 'teacher', 'teacher_name'
-        )
-        import_id_fields = ('id',)
+        model = Mark
+        fields = ('id', 'student', 'subject', 'teacher', 'term', 'exam', 'mid_term', 'end_term', 'school')
+        export_order = fields
+
+
+class TimetableResource(resources.ModelResource):
+    class Meta:
+        model = Timetable
+        fields = ('id', 'class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'school')
+        export_order = fields

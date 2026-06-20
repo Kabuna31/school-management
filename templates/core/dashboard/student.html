@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Student Dashboard{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">Student Dashboard</h1>
+    <p class="text-gray-600">Welcome, {{ request.user.get_full_name|default:request.user.username }}</p>
+</div>
+
+{% if student %}
+<!-- Student Info -->
+<div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div class="flex items-start justify-between">
+        <div>
+            <h2 class="text-xl font-bold text-gray-800">{{ student.user.get_full_name }}</h2>
+            <p class="text-gray-600">Admission: {{ student.admission_number }}</p>
+            <p class="text-gray-600">Class: {{ student.class_level.name|default:"Not assigned" }}</p>
+            <p class="text-gray-600">Stream: {{ student.stream.name|default:"Not assigned" }}</p>
+        </div>
+        <div class="text-right">
+            <div class="bg-blue-100 rounded-lg p-4">
+                <p class="text-sm text-gray-600">Average Score</p>
+                <p class="text-2xl font-bold text-blue-700">{{ avg_score|floatformat:1 }}%</p>
+            </div>
+            <div class="bg-green-100 rounded-lg p-4 mt-2">
+                <p class="text-sm text-gray-600">Total Points</p>
+                <p class="text-2xl font-bold text-green-700">{{ total_points }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Access - Reports -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <a href="{% url 'core:my_marksheet' %}" class="bg-blue-600 text-white rounded-lg shadow-md p-6 hover:bg-blue-700 transition text-center">
+        <i class="fas fa-file-alt text-3xl mb-2"></i>
+        <h3 class="text-lg font-semibold">My Marksheet</h3>
+        <p class="text-sm text-blue-100">View your marksheet</p>
+    </a>
+    <a href="{% url 'core:my_reports' %}" class="bg-purple-600 text-white rounded-lg shadow-md p-6 hover:bg-purple-700 transition text-center">
+        <i class="fas fa-chart-line text-3xl mb-2"></i>
+        <h3 class="text-lg font-semibold">My Performance</h3>
+        <p class="text-sm text-purple-100">View your performance report</p>
+    </a>
+    <a href="{% url 'core:my_marksheet_print' %}" class="bg-green-600 text-white rounded-lg shadow-md p-6 hover:bg-green-700 transition text-center">
+        <i class="fas fa-print text-3xl mb-2"></i>
+        <h3 class="text-lg font-semibold">Print Marksheet</h3>
+        <p class="text-sm text-green-100">Print your marksheet</p>
+    </a>
+</div>
+
+<!-- Marks Table -->
+<div class="bg-white rounded-lg shadow-md p-6">
+    <h2 class="text-xl font-bold text-gray-800 mb-4">My Marks</h2>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Subject</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Term</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Exam</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Mid Term</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">End Term</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Total</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Grade</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Points</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mark in marks %}
+                <tr class="border-t hover:bg-gray-50">
+                    <td class="px-4 py-2 text-sm">{{ mark.subject.name }}</td>
+                    <td class="px-4 py-2 text-sm">{{ mark.term }}</td>
+                    <td class="px-4 py-2 text-sm">{{ mark.exam }}</td>
+                    <td class="px-4 py-2 text-sm">{{ mark.mid_term|floatformat:1 }}</td>
+                    <td class="px-4 py-2 text-sm">{{ mark.end_term|floatformat:1 }}</td>
+                    <td class="px-4 py-2 text-sm font-semibold">{{ mark.total_score|floatformat:1 }}</td>
+                    <td class="px-4 py-2 text-sm">
+                        <span class="px-2 py-1 rounded-full text-xs 
+                            {% if mark.grade == 'A' %}bg-green-100 text-green-800
+                            {% elif mark.grade == 'B' %}bg-blue-100 text-blue-800
+                            {% elif mark.grade == 'C' %}bg-yellow-100 text-yellow-800
+                            {% else %}bg-red-100 text-red-800{% endif %}">
+                            {{ mark.grade }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-2 text-sm">{{ mark.grade_points }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8" class="px-4 py-2 text-gray-500 text-center">No marks found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+    <p class="text-yellow-800">Student profile not found. Please contact the school administrator.</p>
+</div>
+{% endif %}
+{% endblock %}

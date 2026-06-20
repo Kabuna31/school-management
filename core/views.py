@@ -1,619 +1,1093 @@
-from django.shortcuts import render, redirect
-from django.urls import reverse
-from django.views.generic import RedirectView, TemplateView
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.shortcuts import render, redirect, get_object_or_404
 from django.views import View
-from django.db.models import Avg, Count, Max
-from .models import (
-    School, ClassLevel, Stream, Subject,
-    StudentProfile, EmployeeProfile, ParentProfile, Mark
+from django.views.generic import TemplateView, RedirectView
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.decorators import login_required
+from django.db.models import (
+    Avg,
+    Count,
+    F,
+    FloatField,
+    ExpressionWrapper,
+    Sum,
+    Q,
+    Max,
+    Min,
 )
+from django.db.models.functions import Coalesce
+from django.urls import reverse
+from django.http import HttpResponseForbidden, HttpResponseRedirect, JsonResponse, HttpResponse
+from django.contrib.auth.views import LoginView
+from django.template.loader import render_to_string
+from django.core.paginator import Paginator
+from django.contrib import messages
 
-ADMIN_ROLES  = ['system_admin', 'school_admin','headteacher']
-STAFF_ROLES  = ['teacher', 'class_teacher', 'dos']
-ALLOWED_MARK_ENTRY_ROLES = ADMIN_ROLES + STAFF_ROLES
+from .models import (
+    School,
+    User,
+    EmployeeProfile,
+    StudentProfile,
+    ParentProfile,
+    ClassLevel,
+    Stream,
+    Subject,
+    Mark,
+    TERM_CHOICES,
+    EXAM_CHOICES,
+    MARK_MANAGE_ROLES,
+    MARK_ENTRY_ROLES,
+)
+from .helpers import total_expr, mark_average, grade_letter, grade_points
+from .reports import ReportGenerator
 
 
-# ── Role Router ────────────────────────────────────────────────────────────
-class RoleRedirectView(LoginRequiredMixin, RedirectView):
-    permanent = False
+# -------------------------------------------------------
+# Custom Login View
+# -------------------------------------------------------
 
-    def get_redirect_url(self, *args, **kwargs):
-
+class CustomLoginView(LoginView):
+    """Custom login view that redirects based on role"""
+    template_name = 'registration/login.html'
+    
+    def get_success_url(self):
+        user = self.request.user
         role_map = {
-            'system_admin': reverse('core:superuser_dashboard'),
-            'school_admin': reverse('core:schooladmin_dashboard'),
-            'headteacher': reverse('core:headteacher_dashboard'),
-
-            'dos': reverse('core:dos_dashboard'),
-            'bursar': reverse('core:bursar_dashboard'),
-
-            'teacher': reverse('core:teacher_dashboard'),
-            'class_teacher': reverse('core:teacher_dashboard'),
-
-            'student': reverse('core:student_dashboard'),
-            'parent': reverse('core:parent_dashboard'),
+            "system_admin": "core:superuser_dashboard",
+            "school_admin": "core:schooladmin_dashboard",
+            "headteacher": "core:headteacher_dashboard",
+            "dos": "core:dos_dashboard",
+            "teacher": "core:teacher_dashboard",
+            "class_teacher": "core:teacher_dashboard",
+            "student": "core:student_dashboard",
+            "parent": "core:parent_dashboard",
+            "bursar": "core:bursar_dashboard",
         }
-
-        return role_map.get(
-            getattr(self.request.user, "role", None),
-            '/admin/'
-        )
-
-    @staticmethod
-    def _safe_reverse(url_name, fallback='/'):
-        try:
-            return reverse(url_name)
-        except Exception:
-            return fallback
-
-# ── Superuser / System Owner Dashboard ────────────────────────────────────
-
-class SuperuserDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
-    template_name = 'core/dashboards/superuser.html'
-
-    def test_func(self):
-        return self.request.user.role in ["system_admin"]
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.update({
-            'school_count':   School.objects.count(),
-            'student_count':  StudentProfile.objects.count(),
-            'staff_count':    EmployeeProfile.objects.count(),
-            'subject_count':  Subject.objects.count(),
-            'mark_count':     Mark.objects.count(),
-            'avg_score':      Mark.objects.aggregate(a=Avg('score'))['a'],
-            'schools':        School.objects.annotate(
-                                students=Count('studentprofile'),
-                                staff=Count('employeeprofile'),
-                              ).order_by('name'),
-            'recent_marks':   Mark.objects.select_related(
-                                'student__user', 'subject', 'teacher__user'
-                              ).order_by('-id')[:10],
-        })
-        return context
-
-# ── School Admin Dashboard ──────────────────────────────────────────────────
-
-class SchooladminDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
-    template_name = 'core/dashboards/schooladmin.html'
-
-    def test_func(self):
-        return self.request.user.role == 'school_admin'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        school = self.request.user.school
-        context.update({
-            'school':         school,
-            'student_count':  StudentProfile.objects.filter(school=school).count(),
-            'staff_count':    EmployeeProfile.objects.filter(school=school).count(),
-            'class_count':    ClassLevel.objects.filter(school=school).count(),
-            'subject_count':  Subject.objects.filter(school=school).count(),
-            'mark_count':     Mark.objects.filter(school=school).count(),
-            'avg_score':      Mark.objects.filter(school=school).aggregate(a=Avg('score'))['a'],
-            'classes':        ClassLevel.objects.filter(school=school).annotate(
-                                students=Count('studentprofile')
-                              ).order_by('name'),
-            'subject_avgs':   Subject.objects.filter(school=school).annotate(
-                                avg=Avg('mark__score'),
-                                total=Count('mark'),
-                              ).order_by('name'),
-            'recent_marks':   Mark.objects.filter(school=school).select_related(
-                                'student__user', 'subject', 'teacher__user'
-                              ).order_by('-id')[:10],
-            'top_students':   Mark.objects.filter(school=school).values(
-                                'student__user__first_name',
-                                'student__user__last_name',
-                                'student__admission_number',
-                              ).annotate(avg=Avg('score')).order_by('-avg')[:5],
-        })
-        return context
-
-# ── Headteacher Dashboard ──────────────────────────────────────────────────
-
-class HeadteacherDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
-    template_name = 'core/dashboards/headteacher.html'
-
-    def test_func(self):
-        return self.request.user.role == 'headteacher'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        school = self.request.user.school
-        context.update({
-            'school':         school,
-            'student_count':  StudentProfile.objects.filter(school=school).count(),
-            'staff_count':    EmployeeProfile.objects.filter(school=school).count(),
-            'class_count':    ClassLevel.objects.filter(school=school).count(),
-            'subject_count':  Subject.objects.filter(school=school).count(),
-            'mark_count':     Mark.objects.filter(school=school).count(),
-            'avg_score':      Mark.objects.filter(school=school).aggregate(a=Avg('score'))['a'],
-            'classes':        ClassLevel.objects.filter(school=school).annotate(
-                                students=Count('studentprofile')
-                              ).order_by('name'),
-            'subject_avgs':   Subject.objects.filter(school=school).annotate(
-                                avg=Avg('mark__score'),
-                                total=Count('mark'),
-                              ).order_by('name'),
-            'recent_marks':   Mark.objects.filter(school=school).select_related(
-                                'student__user', 'subject', 'teacher__user'
-                              ).order_by('-id')[:10],
-            'top_students':   Mark.objects.filter(school=school).values(
-                                'student__user__first_name',
-                                'student__user__last_name',
-                                'student__admission_number',
-                              ).annotate(avg=Avg('score')).order_by('-avg')[:5],
-        })
-        return context
+        return reverse(role_map.get(user.role, "admin:index"))
 
 
-# ── Director of Studies Dashboard ─────────────────────────────────────────
+# -------------------------------------------------------
+# Permission Mixins
+# -------------------------------------------------------
 
-class DOSDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
-    template_name = 'core/dashboards/dos.html'
-
-    def test_func(self):
-        return self.request.user.role == 'dos'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        school = self.request.user.school
-        context.update({
-            'school':        school,
-            'student_count': StudentProfile.objects.filter(school=school).count(),
-            'class_count':   ClassLevel.objects.filter(school=school).count(),
-            'mark_count':    Mark.objects.filter(school=school).count(),
-            'avg_score':     Mark.objects.filter(school=school).aggregate(a=Avg('score'))['a'],
-            'classes':       ClassLevel.objects.filter(school=school).annotate(
-                               students=Count('studentprofile'),
-                               avg_score=Avg('studentprofile__mark__score'),
-                             ).order_by('name'),
-            'subject_avgs':  Subject.objects.filter(school=school).annotate(
-                               avg=Avg('mark__score'),
-                               total=Count('mark'),
-                             ).order_by('-avg'),
-            'recent_marks':  Mark.objects.filter(school=school).select_related(
-                               'student__user', 'subject', 'teacher__user'
-                             ).order_by('-id')[:15],
-            'terms':         ['Term 1', 'Term 2', 'Term 3'],
-        })
-        return context
-
-
-# ── Bursar Dashboard ───────────────────────────────────────────────────────
-
-class BursarDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
-    template_name = 'core/dashboards/bursar.html'
-
-    def test_func(self):
-        return self.request.user.role == 'bursar'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        school = self.request.user.school
-        context.update({
-            'school':        school,
-            'student_count': StudentProfile.objects.filter(school=school).count(),
-            'staff_count':   EmployeeProfile.objects.filter(school=school).count(),
-            'class_count':   ClassLevel.objects.filter(school=school).count(),
-            'classes':       ClassLevel.objects.filter(school=school).annotate(
-                               students=Count('studentprofile')
-                             ).order_by('name'),
-            'profile':       getattr(self.request.user, 'employeeprofile', None),
-        })
-        return context
-
-
-# ── Teacher / Class Teacher Dashboard ─────────────────────────────────────
-
-class TeacherDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
-    template_name = 'core/dashboards/teacher.html'
-
-    def test_func(self):
-        return self.request.user.role in ['teacher', 'class_teacher']
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        school  = self.request.user.school
-        profile = getattr(self.request.user, 'employeeprofile', None)
-        context.update({
-            'school':        school,
-            'profile':       profile,
-            'student_count': StudentProfile.objects.filter(school=school).count(),
-            'mark_count':    Mark.objects.filter(school=school, teacher=profile).count() if profile else 0,
-            'avg_score':     Mark.objects.filter(school=school, teacher=profile).aggregate(a=Avg('score'))['a'] if profile else None,
-            'subjects':      Subject.objects.filter(school=school),
-            'classes':       ClassLevel.objects.filter(school=school),
-            'recent_marks':  Mark.objects.filter(school=school, teacher=profile).select_related(
-                               'student__user', 'subject'
-                             ).order_by('-id')[:10] if profile else [],
-            'subject_avgs':  Mark.objects.filter(school=school, teacher=profile).values(
-                               'subject__name'
-                             ).annotate(avg=Avg('score'), total=Count('id')).order_by('subject__name') if profile else [],
-        })
-        return context
-
-
-# ── Student Dashboard ──────────────────────────────────────────────────────
-
-class StudentDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
-    template_name = 'core/dashboards/student.html'
-
-    def test_func(self):
-        return self.request.user.role == 'student'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        profile = getattr(self.request.user, 'studentprofile', None)
-        if profile:
-            marks = Mark.objects.filter(student=profile).select_related('subject')
-            context.update({
-                'profile':     profile,
-                'marks':       marks.order_by('term', 'subject__name'),
-                'avg_score':   marks.aggregate(a=Avg('score'))['a'],
-                'mark_count':  marks.count(),
-                'best_subject': marks.values('subject__name').annotate(
-                                  avg=Avg('score')
-                                ).order_by('-avg').first(),
-                'term_avgs':   marks.values('term').annotate(
-                                  avg=Avg('score')
-                                ).order_by('term'),
-            })
-        return context
-
-
-# ── Parent Dashboard ───────────────────────────────────────────────────────
-
-class ParentDashboardView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
-    template_name = 'core/dashboards/parent.html'
-
-    def test_func(self):
-        return self.request.user.role == 'parent'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        profile = getattr(self.request.user, 'parentprofile', None)
-        if profile:
-            children = profile.children.select_related(
-                'user', 'class_level', 'stream'
-            ).all()
-            children_data = []
-            for child in children:
-                marks = Mark.objects.filter(student=child).select_related('subject')
-                children_data.append({
-                    'child':      child,
-                    'marks':      marks.order_by('term', 'subject__name'),
-                    'avg_score':  marks.aggregate(a=Avg('score'))['a'],
-                    'mark_count': marks.count(),
-                    'term_avgs':  marks.values('term').annotate(avg=Avg('score')).order_by('term'),
-                })
-            context.update({
-                'profile':       profile,
-                'children_data': children_data,
-                'child_count':   children.count(),
-            })
-        return context
-
-
-# ── Mark Entry (Teachers / DOS / Admin) ───────────────────────────────────
-
-class TeacherMarkEntryView(LoginRequiredMixin, UserPassesTestMixin, View):
-
-    def test_func(self):
-        return self.request.user.role in ALLOWED_MARK_ENTRY_ROLES
-
-    def get(self, request, *args, **kwargs):
-        school = getattr(request.user, 'school', None)
-        if not school:
-            return redirect('core:role_redirect')
-
-        selected_class   = request.GET.get('class_level')
-        selected_stream  = request.GET.get('stream')
-        selected_subject = request.GET.get('subject')
-        selected_term    = request.GET.get('term')
-
-        context = {
-            'classes':          ClassLevel.objects.filter(school=school),
-            'streams':          Stream.objects.filter(school=school),
-            'subjects':         Subject.objects.filter(school=school),
-            'terms':            ['Term 1', 'Term 2', 'Term 3'],
-            'selected_class':   selected_class,
-            'selected_stream':  selected_stream,
-            'selected_subject': selected_subject,
-            'selected_term':    selected_term,
-            'success':          request.GET.get('success'),
-        }
-
-        if selected_class and selected_stream:
-            context['students'] = StudentProfile.objects.filter(
-                school=school,
-                class_level_id=selected_class,
-                stream_id=selected_stream,
-            ).order_by('user__first_name')
-
-            if selected_subject and selected_term:
-                marks = Mark.objects.filter(
-                    school=school,
-                    subject_id=selected_subject,
-                    term=selected_term,
-                    student__class_level_id=selected_class,
-                    student__stream_id=selected_stream,
-                )
-                context['existing_marks'] = {m.student_id: m.score for m in marks}
-
-        return render(request, 'core/teacher_mark_entry.html', context)
-
-    def post(self, request, *args, **kwargs):
-        school = getattr(request.user, 'school', None)
-        if not school:
-            return redirect('core:role_redirect')
-
-        class_id   = request.POST.get('class_level')
-        stream_id  = request.POST.get('stream')
-        subject_id = request.POST.get('subject')
-        term       = request.POST.get('term')
-        teacher_profile = getattr(request.user, 'employeeprofile', None)
-
-        if not all([class_id, stream_id, subject_id, term]):
-            return redirect('core:role_redirect')
-
-        errors = []
-        for key, value in request.POST.items():
-            if key.startswith('student_') and value.strip():
-                try:
-                    student_id = key.split('_')[-1]
-                    score = float(value)
-                    if not (0 <= score <= 100):
-                        errors.append(f"Score {score} out of range.")
-                        continue
-                    Mark.objects.update_or_create(
-                        school=school,
-                        student_id=student_id,
-                        subject_id=subject_id,
-                        term=term,
-                        defaults={'score': score, 'teacher': teacher_profile}
-                    )
-                except (ValueError, TypeError):
-                    errors.append(f"Invalid score '{value}' skipped.")
-                    continue
-
-        url    = reverse('core:teacher_mark_entry')
-        status = 'true' if not errors else 'partial'
-        return redirect(
-            f"{url}?class_level={class_id}&stream={stream_id}"
-            f"&subject={subject_id}&term={term}&success={status}"
-        )
-# Add these to core/views.py
-
-
-# ── School Admin: Marks Management (Headteacher) ───────────────────────────
-
-class SchoolMarksView(LoginRequiredMixin, UserPassesTestMixin, View):
-    """Headteacher can view and edit all marks for their school."""
-
-    def test_func(self):
-        return self.request.user.role == 'headteacher'
-
-    def get(self, request, *args, **kwargs):
-        school = request.user.school
-        if not school:
-            return redirect('core:role_redirect')
-
-        selected_class   = request.GET.get('class_level')
-        selected_stream  = request.GET.get('stream')
-        selected_subject = request.GET.get('subject')
-        selected_term    = request.GET.get('term')
-        search           = request.GET.get('search', '').strip()
-
-        context = {
-            'classes':          ClassLevel.objects.filter(school=school),
-            'streams':          Stream.objects.filter(school=school),
-            'subjects':         Subject.objects.filter(school=school),
-            'terms':            ['Term 1', 'Term 2', 'Term 3'],
-            'selected_class':   selected_class,
-            'selected_stream':  selected_stream,
-            'selected_subject': selected_subject,
-            'selected_term':    selected_term,
-            'search':           search,
-            'success':          request.GET.get('success'),
-        }
-
-        # Build marks queryset with filters
-        marks_qs = Mark.objects.filter(school=school).select_related(
-            'student__user', 'subject', 'teacher__user',
-            'student__class_level', 'student__stream'
-        )
-
-        if selected_class:
-            marks_qs = marks_qs.filter(student__class_level_id=selected_class)
-        if selected_stream:
-            marks_qs = marks_qs.filter(student__stream_id=selected_stream)
-        if selected_subject:
-            marks_qs = marks_qs.filter(subject_id=selected_subject)
-        if selected_term:
-            marks_qs = marks_qs.filter(term=selected_term)
-        if search:
-            marks_qs = marks_qs.filter(
-                student__user__first_name__icontains=search
-            ) | marks_qs.filter(
-                student__user__last_name__icontains=search
-            ) | marks_qs.filter(
-                student__admission_number__icontains=search
+class RoleRequiredMixin:
+    """Mixin to require specific user roles"""
+    required_roles = []
+    
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return HttpResponseRedirect(reverse('core:login'))
+        
+        if not self.required_roles:
+            return super().dispatch(request, *args, **kwargs)
+        
+        # Superusers and system admins can access everything
+        if request.user.is_superuser or request.user.role == 'system_admin':
+            return super().dispatch(request, *args, **kwargs)
+        
+        if request.user.role not in self.required_roles:
+            return HttpResponseForbidden(
+                f"You don't have permission to access this page. "
+                f"Required roles: {', '.join(self.required_roles)}"
             )
+        return super().dispatch(request, *args, **kwargs)
 
-        context['marks']       = marks_qs.order_by('student__user__first_name', 'subject__name')
-        context['total_marks'] = marks_qs.count()
-        context['avg_score']   = marks_qs.aggregate(a=Avg('score'))['a']
 
-        # If class+stream+subject+term all selected, also load student list
-        # so headteacher can enter missing marks
-        if selected_class and selected_stream and selected_subject and selected_term:
-            context['students'] = StudentProfile.objects.filter(
+class SchoolScopedMixin:
+    """Mixin to ensure user only accesses their school's data"""
+    
+    def get_school(self):
+        """Get the school for the current user"""
+        if hasattr(self.request.user, 'school'):
+            return self.request.user.school
+        return None
+    
+    def dispatch(self, request, *args, **kwargs):
+        # Superusers can access everything
+        if request.user.role == 'system_admin' or request.user.is_superuser:
+            return super().dispatch(request, *args, **kwargs)
+        
+        school = self.get_school()
+        if not school:
+            return HttpResponseForbidden("You are not associated with a school.")
+        return super().dispatch(request, *args, **kwargs)
+
+
+# -------------------------------------------------------
+# Role Redirect View
+# -------------------------------------------------------
+
+class RoleRedirectView(View):
+    """Redirect users to their appropriate dashboard based on role"""
+    
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return redirect('core:login')
+        
+        role_map = {
+            "system_admin": "core:superuser_dashboard",
+            "school_admin": "core:schooladmin_dashboard",
+            "headteacher": "core:headteacher_dashboard",
+            "dos": "core:dos_dashboard",
+            "teacher": "core:teacher_dashboard",
+            "class_teacher": "core:teacher_dashboard",
+            "student": "core:student_dashboard",
+            "parent": "core:parent_dashboard",
+            "bursar": "core:bursar_dashboard",
+        }
+        
+        redirect_url = role_map.get(
+            request.user.role,
+            "admin:index"
+        )
+        
+        return redirect(redirect_url)
+
+
+# -------------------------------------------------------
+# Dashboard Views
+# -------------------------------------------------------
+
+class SuperuserDashboardView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
+    """Dashboard for system administrators"""
+    template_name = "core/dashboard/superuser.html"
+    required_roles = ['system_admin']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        marks = Mark.objects.select_related("student", "subject")
+        
+        ctx["school_count"] = School.objects.count()
+        ctx["student_count"] = StudentProfile.objects.count()
+        ctx["staff_count"] = EmployeeProfile.objects.count()
+        ctx["subject_count"] = Subject.objects.count()
+        ctx["mark_count"] = marks.count()
+        ctx["avg_score"] = mark_average(marks)
+        ctx["recent_marks"] = marks.order_by("-id")[:10]
+        ctx["schools"] = School.objects.all()
+        
+        return ctx
+
+
+class SchooladminDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """Dashboard for school administrators"""
+    template_name = "core/dashboard/school_admin.html"
+    required_roles = ['school_admin']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        if not school:
+            return ctx
+        
+        marks = Mark.objects.filter(school=school)
+        
+        ctx["school"] = school
+        ctx["student_count"] = StudentProfile.objects.filter(school=school).count()
+        ctx["staff_count"] = EmployeeProfile.objects.filter(school=school).count()
+        ctx["class_count"] = ClassLevel.objects.filter(school=school).count()
+        ctx["subject_count"] = Subject.objects.filter(school=school).count()
+        ctx["mark_count"] = marks.count()
+        ctx["avg_score"] = mark_average(marks)
+        ctx["recent_marks"] = marks.select_related(
+            "student", "subject", "teacher"
+        ).order_by("-id")[:10]
+        ctx["classes"] = ClassLevel.objects.filter(school=school)
+        
+        return ctx
+
+
+class HeadteacherDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """Dashboard for headteachers"""
+    template_name = "core/dashboard/headteacher.html"
+    required_roles = ['headteacher']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        if not school:
+            return ctx
+        
+        marks = Mark.objects.filter(school=school)
+        
+        ctx["school"] = school
+        ctx["student_count"] = StudentProfile.objects.filter(school=school).count()
+        ctx["staff_count"] = EmployeeProfile.objects.filter(school=school).count()
+        ctx["class_count"] = ClassLevel.objects.filter(school=school).count()
+        ctx["subject_count"] = Subject.objects.filter(school=school).count()
+        ctx["mark_count"] = marks.count()
+        ctx["avg_score"] = mark_average(marks)
+        ctx["recent_marks"] = marks.select_related(
+            "student", "subject", "teacher"
+        ).order_by("-id")[:10]
+        ctx["classes"] = ClassLevel.objects.filter(school=school)
+        
+        return ctx
+
+
+class DOSDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """Dashboard for Director of Studies"""
+    template_name = "core/dashboard/dos.html"
+    required_roles = ['dos']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        if not school:
+            return ctx
+        
+        marks = Mark.objects.filter(school=school)
+        
+        ctx["school"] = school
+        ctx["student_count"] = StudentProfile.objects.filter(school=school).count()
+        ctx["staff_count"] = EmployeeProfile.objects.filter(school=school).count()
+        ctx["class_count"] = ClassLevel.objects.filter(school=school).count()
+        ctx["subject_count"] = Subject.objects.filter(school=school).count()
+        ctx["mark_count"] = marks.count()
+        ctx["avg_score"] = mark_average(marks)
+        ctx["recent_marks"] = marks.select_related(
+            "student", "subject", "teacher"
+        ).order_by("-id")[:10]
+        ctx["classes"] = ClassLevel.objects.filter(school=school)
+        
+        return ctx
+
+
+class TeacherDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """Dashboard for teachers"""
+    template_name = "core/dashboard/teacher.html"
+    required_roles = ['teacher', 'class_teacher']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        if not school:
+            return ctx
+        
+        try:
+            teacher = EmployeeProfile.objects.get(user=self.request.user)
+            marks = Mark.objects.filter(
+                school=school,
+                teacher=teacher
+            )
+            ctx["my_marks_count"] = marks.count()
+            ctx["my_avg_score"] = mark_average(marks)
+        except EmployeeProfile.DoesNotExist:
+            ctx["my_marks_count"] = 0
+            ctx["my_avg_score"] = 0
+        
+        ctx["school"] = school
+        ctx["student_count"] = StudentProfile.objects.filter(school=school).count()
+        ctx["subject_count"] = Subject.objects.filter(school=school).count()
+        
+        return ctx
+
+
+class BursarDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """Dashboard for bursars"""
+    template_name = "core/dashboard/bursar.html"
+    required_roles = ['bursar']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        if not school:
+            return ctx
+        
+        ctx["school"] = school
+        ctx["student_count"] = StudentProfile.objects.filter(school=school).count()
+        ctx["staff_count"] = EmployeeProfile.objects.filter(school=school).count()
+        
+        return ctx
+
+
+class StudentDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """Dashboard for students"""
+    template_name = "core/dashboard/student.html"
+    required_roles = ['student']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        try:
+            student = StudentProfile.objects.select_related(
+                "class_level", "stream"
+            ).get(user=self.request.user)
+            
+            marks = Mark.objects.filter(
+                student=student
+            ).select_related("subject")
+            
+            ctx["student"] = student
+            ctx["marks"] = marks
+            ctx["avg_score"] = mark_average(marks)
+            ctx["total_points"] = sum([m.grade_points for m in marks])
+            
+        except StudentProfile.DoesNotExist:
+            ctx["student"] = None
+            ctx["marks"] = []
+            ctx["avg_score"] = 0
+            ctx["total_points"] = 0
+        
+        return ctx
+
+
+class ParentDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """Dashboard for parents"""
+    template_name = "core/dashboard/parent.html"
+    required_roles = ['parent']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        try:
+            parent = ParentProfile.objects.get(user=self.request.user)
+            children = parent.children.all().prefetch_related("mark_set")
+            
+            rows = []
+            for child in children:
+                marks = Mark.objects.filter(student=child)
+                rows.append({
+                    "student": child,
+                    "average": mark_average(marks),
+                    "points": sum([m.grade_points for m in marks])
+                })
+            
+            ctx["children"] = rows
+            ctx["parent"] = parent
+            
+        except ParentProfile.DoesNotExist:
+            ctx["children"] = []
+            ctx["parent"] = None
+        
+        return ctx
+
+
+# -------------------------------------------------------
+# Mark Entry Views
+# -------------------------------------------------------
+
+class TeacherMarkEntryView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
+    """View for entering marks"""
+    template_name = "core/teacher_mark_entry.html"
+    required_roles = MARK_ENTRY_ROLES
+    
+    def get(self, request):
+        school = self.get_school()
+        if not school:
+            return HttpResponseForbidden("You are not associated with a school.")
+        
+        selected_class = request.GET.get("class_level")
+        selected_stream = request.GET.get("stream")
+        selected_subject = request.GET.get("subject")
+        selected_term = request.GET.get("term")
+        selected_exam = request.GET.get("exam")
+        
+        students = StudentProfile.objects.none()
+        existing_marks = {}
+        
+        if selected_class and selected_stream:
+            students = StudentProfile.objects.filter(
                 school=school,
                 class_level_id=selected_class,
-                stream_id=selected_stream,
-            ).order_by('user__first_name')
-            existing = Mark.objects.filter(
+                stream_id=selected_stream
+            ).select_related("user")
+        
+        if selected_subject and selected_term and selected_exam:
+            marks = Mark.objects.filter(
                 school=school,
                 subject_id=selected_subject,
                 term=selected_term,
-                student__class_level_id=selected_class,
-                student__stream_id=selected_stream,
+                exam=selected_exam
             )
-            context['existing_marks'] = {m.student_id: m.score for m in existing}
-
-        return render(request, 'core/school_admin/marks.html', context)
-
-    def post(self, request, *args, **kwargs):
-        school = request.user.school
-        if not school:
-            return redirect('core:role_redirect')
-
-        action     = request.POST.get('action')
-        class_id   = request.POST.get('class_level')
-        stream_id  = request.POST.get('stream')
-        subject_id = request.POST.get('subject')
-        term       = request.POST.get('term')
-
-        # ── Delete a single mark ───────────────────────────────────────────
-        if action == 'delete':
-            mark_id = request.POST.get('mark_id')
-            Mark.objects.filter(school=school, id=mark_id).delete()
-            return redirect(request.META.get('HTTP_REFERER', 'core:school_marks'))
-
-        # ── Bulk save marks (entry mode) ───────────────────────────────────
-        if not all([class_id, stream_id, subject_id, term]):
-            return redirect('core:school_marks')
-
-        errors = []
-        for key, value in request.POST.items():
-            if key.startswith('student_') and value.strip():
-                try:
-                    student_id = key.split('_')[-1]
-                    score = float(value)
-                    if not (0 <= score <= 100):
-                        errors.append(f"Score {score} out of range.")
-                        continue
-                    Mark.objects.update_or_create(
-                        school=school,
-                        student_id=student_id,
-                        subject_id=subject_id,
-                        term=term,
-                        defaults={'score': score, 'teacher': None}
-                    )
-                except (ValueError, TypeError):
-                    continue
-
-        url    = reverse('core:school_marks')
-        status = 'true' if not errors else 'partial'
-        return redirect(
-            f"{url}?class_level={class_id}&stream={stream_id}"
-            f"&subject={subject_id}&term={term}&success={status}"
-        )
-
-
-class SchoolMarkEditView(LoginRequiredMixin, UserPassesTestMixin, View):
-    """Headteacher edits a single mark."""
-
-    def test_func(self):
-        return self.request.user.role == 'headteacher'
-
-    def get(self, request, mark_id, *args, **kwargs):
-        school = request.user.school
-        mark   = Mark.objects.select_related(
-            'student__user', 'subject', 'student__class_level', 'student__stream'
-        ).get(id=mark_id, school=school)
-        return render(request, 'core/school_admin/mark_edit.html', {'mark': mark})
-
-    def post(self, request, mark_id, *args, **kwargs):
-        school = request.user.school
-        mark   = Mark.objects.get(id=mark_id, school=school)
-        try:
-            score = float(request.POST.get('score', 0))
-            if 0 <= score <= 100:
-                mark.score = score
-                mark.save()
-        except (ValueError, TypeError):
-            pass
-        return redirect(
-            reverse('core:school_marks') + '?success=true'
-        )
-
-from django.http import HttpResponse
-from django.template.loader import render_to_string
-from xhtml2pdf import pisa
-from io import BytesIO
-from .models import StudentProfile, Mark
-
-
-def get_grade(score):
-    if score >= 80:
-        return "A"
-    elif score >= 70:
-        return "B"
-    elif score >= 60:
-        return "C"
-    elif score >= 50:
-        return "D"
-    return "E"
-
-
-def build_student_report(student):
-    marks = Mark.objects.filter(
-        student=student
-    ).select_related("subject")
-
-    rows = []
-
-    for mark in marks:
-        rows.append({
-            "subject": mark.subject.name,
-            "fs": mark.score,
-            "grade": get_grade(mark.score),
-        })
-
-    return rows
-
-
-def student_report_pdf(request, student_id):
-
-    student = StudentProfile.objects.get(id=student_id)
-
-    report = build_student_report(student)
-
-    html = render_to_string(
-        "report_card.html",
-        {
-            "student": student,
-            "school": student.school,
-            "report": report,
-            "term": "Term 1",
+            for m in marks:
+                existing_marks[m.student_id] = (
+                    float(m.mid_term) if selected_exam == "Mid Term" else float(m.end_term)
+                )
+        
+        context = {
+            "classes": ClassLevel.objects.filter(school=school),
+            "streams": Stream.objects.filter(school=school),
+            "subjects": Subject.objects.filter(school=school),
+            "terms": [t[0] for t in TERM_CHOICES],
+            "exams": [e[0] for e in EXAM_CHOICES],
+            "students": students,
+            "existing_marks": existing_marks,
+            "selected_class": selected_class,
+            "selected_stream": selected_stream,
+            "selected_subject": selected_subject,
+            "selected_term": selected_term,
+            "selected_exam": selected_exam,
+            "success": request.GET.get("success"),
         }
-    )
+        
+        return render(request, self.template_name, context)
+    
+    def post(self, request):
+        school = self.get_school()
+        if not school:
+            return HttpResponseForbidden("You are not associated with a school.")
+        
+        try:
+            teacher = EmployeeProfile.objects.get(user=request.user)
+        except EmployeeProfile.DoesNotExist:
+            teacher = None
+        
+        subject = request.POST.get("subject")
+        term = request.POST.get("term")
+        exam = request.POST.get("exam")
+        class_level = request.POST.get("class_level")
+        stream = request.POST.get("stream")
+        
+        if not all([subject, term, exam, class_level, stream]):
+            messages.error(request, "Please select all required fields.")
+            return redirect("core:teacher_mark_entry")
+        
+        students = StudentProfile.objects.filter(
+            school=school,
+            class_level_id=class_level,
+            stream_id=stream
+        )
+        
+        max_mark = 20 if exam == "Mid Term" else 80
+        saved_count = 0
+        
+        for student in students:
+            value = request.POST.get(f"student_{student.pk}")
+            if not value:
+                continue
+            
+            try:
+                value = float(value)
+                if value < 0 or value > max_mark:
+                    continue
+                
+                mark, created = Mark.objects.get_or_create(
+                    school=school,
+                    student=student,
+                    subject_id=subject,
+                    term=term,
+                    exam=exam,
+                    defaults={"teacher": teacher}
+                )
+                
+                if exam == "Mid Term":
+                    mark.mid_term = value
+                else:
+                    mark.end_term = value
+                
+                if teacher:
+                    mark.teacher = teacher
+                
+                mark.save()
+                saved_count += 1
+                
+            except (ValueError, TypeError):
+                continue
+        
+        if saved_count > 0:
+            messages.success(request, f"Successfully saved {saved_count} marks!")
+        else:
+            messages.warning(request, "No marks were saved. Please check your input.")
+        
+        return redirect(reverse("core:teacher_mark_entry"))
 
-    pdf = BytesIO()
 
-    pisa.CreatePDF(
-        html,
-        dest=pdf
-    )
+class SchoolMarksView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """View for viewing all marks in a school"""
+    template_name = "core/school_admin/marks.html"
+    required_roles = MARK_MANAGE_ROLES
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        if not school:
+            return ctx
+        
+        marks = Mark.objects.filter(
+            school=school
+        ).select_related("student", "subject", "teacher")
+        
+        term = self.request.GET.get("term")
+        if term:
+            marks = marks.filter(term=term)
+        
+        ctx["marks"] = marks
+        ctx["total_marks"] = marks.count()
+        ctx["avg_score"] = mark_average(marks)
+        ctx["classes"] = ClassLevel.objects.filter(school=school)
+        ctx["streams"] = Stream.objects.filter(school=school)
+        ctx["subjects"] = Subject.objects.filter(school=school)
+        ctx["terms"] = [t[0] for t in TERM_CHOICES]
+        
+        return ctx
 
-    response = HttpResponse(
-        pdf.getvalue(),
-        content_type="application/pdf"
-    )
 
-    response["Content-Disposition"] = (
-        f'attachment; filename="report_{student.id}.pdf"'
-    )
+class SchoolMarkEditView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
+    """View for editing a single mark"""
+    template_name = "core/school_admin/mark_edit.html"
+    required_roles = MARK_MANAGE_ROLES
+    
+    def get(self, request, mark_id):
+        school = self.get_school()
+        if not school:
+            return HttpResponseForbidden("You are not associated with a school.")
+        
+        mark = get_object_or_404(Mark, pk=mark_id, school=school)
+        
+        return render(request, self.template_name, {"mark": mark})
+    
+    def post(self, request, mark_id):
+        school = self.get_school()
+        if not school:
+            return HttpResponseForbidden("You are not associated with a school.")
+        
+        mark = get_object_or_404(Mark, pk=mark_id, school=school)
+        
+        value = request.POST.get("mark_value")
+        if not value:
+            messages.error(request, "Please enter a value.")
+            return redirect("core:school_mark_edit", mark_id=mark.pk)
+        
+        try:
+            value = float(value)
+        except (ValueError, TypeError):
+            messages.error(request, "Please enter a valid number.")
+            return redirect("core:school_mark_edit", mark_id=mark.pk)
+        
+        limit = 20 if mark.exam == "Mid Term" else 80
+        if value < 0 or value > limit:
+            messages.error(request, f"Value must be between 0 and {limit}.")
+            return redirect("core:school_mark_edit", mark_id=mark.pk)
+        
+        if mark.exam == "Mid Term":
+            mark.mid_term = value
+        else:
+            mark.end_term = value
+        
+        mark.save()
+        messages.success(request, "Mark updated successfully!")
+        
+        return redirect("core:school_marks")
 
-    return response
 
-def class_reports_zip(request, class_id):
-    return HttpResponse(
-        "Bulk reports coming next"
-    )
+class DeleteMarkView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
+    """View for deleting a mark"""
+    required_roles = MARK_MANAGE_ROLES
+    
+    def post(self, request):
+        school = self.get_school()
+        if not school:
+            return HttpResponseForbidden("You are not associated with a school.")
+        
+        mark_id = request.POST.get("mark_id")
+        if not mark_id:
+            return redirect("core:school_marks")
+        
+        mark = Mark.objects.filter(
+            pk=mark_id,
+            school=school
+        ).first()
+        
+        if mark:
+            mark.delete()
+            messages.success(request, "Mark deleted successfully!")
+        else:
+            messages.error(request, "Mark not found.")
+        
+        return redirect("core:school_marks")
 
 
+# -------------------------------------------------------
+# Student & Class Views
+# -------------------------------------------------------
+
+class StudentProfileView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """View for viewing a student's profile and marks"""
+    template_name = "core/student_profile.html"
+    required_roles = ['school_admin', 'headteacher', 'dos', 'teacher', 'class_teacher', 'student', 'parent']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        if not school:
+            return ctx
+        
+        student_id = self.kwargs.get('student_id')
+        student = get_object_or_404(StudentProfile, pk=student_id, school=school)
+        
+        # Check if user has permission to view this student
+        user = self.request.user
+        if user.role == 'student':
+            try:
+                viewer_student = StudentProfile.objects.get(user=user)
+                if viewer_student.pk != student.pk:
+                    return HttpResponseForbidden("You can only view your own profile.")
+            except StudentProfile.DoesNotExist:
+                return HttpResponseForbidden("Student profile not found.")
+        
+        if user.role == 'parent':
+            try:
+                parent = ParentProfile.objects.get(user=user)
+                if student not in parent.children.all():
+                    return HttpResponseForbidden("You can only view your children's profiles.")
+            except ParentProfile.DoesNotExist:
+                return HttpResponseForbidden("Parent profile not found.")
+        
+        marks = Mark.objects.filter(
+            student=student
+        ).select_related("subject", "teacher")
+        
+        marks_by_exam = {}
+        for mark in marks:
+            key = f"{mark.term} - {mark.exam}"
+            if key not in marks_by_exam:
+                marks_by_exam[key] = []
+            marks_by_exam[key].append(mark)
+        
+        ctx["student"] = student
+        ctx["marks"] = marks
+        ctx["marks_by_exam"] = marks_by_exam
+        ctx["avg_score"] = mark_average(marks)
+        ctx["total_points"] = sum([m.grade_points for m in marks])
+        
+        return ctx
+
+
+class ClassMarksView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """View for viewing marks for an entire class"""
+    template_name = "core/class_marks.html"
+    required_roles = ['school_admin', 'headteacher', 'dos', 'teacher', 'class_teacher']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        if not school:
+            return ctx
+        
+        class_id = self.kwargs.get('class_id')
+        class_level = get_object_or_404(ClassLevel, pk=class_id, school=school)
+        
+        students = StudentProfile.objects.filter(
+            school=school,
+            class_level=class_level
+        ).select_related("user", "stream")
+        
+        student_ids = students.values_list('pk', flat=True)
+        marks = Mark.objects.filter(
+            student__in=student_ids
+        ).select_related("student", "subject", "teacher")
+        
+        marks_by_student = {}
+        for student in students:
+            marks_by_student[student.pk] = []
+        
+        for mark in marks:
+            marks_by_student[mark.student_id].append(mark)
+        
+        ctx["class_level"] = class_level
+        ctx["students"] = students
+        ctx["marks_by_student"] = marks_by_student
+        ctx["terms"] = [t[0] for t in TERM_CHOICES]
+        
+        return ctx
+
+
+# -------------------------------------------------------
+# Report Views
+# -------------------------------------------------------
+
+class StudentReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """View student performance report"""
+    template_name = "core/reports/student_report.html"
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher', 'student', 'parent']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        student_id = self.kwargs.get('student_id')
+        school = self.get_school()
+        
+        # If it's a student viewing their own report
+        if not student_id and self.request.user.role == 'student':
+            try:
+                student = StudentProfile.objects.get(user=self.request.user)
+                student_id = student.pk
+            except StudentProfile.DoesNotExist:
+                pass
+        
+        # If it's a parent viewing their child's report
+        if not student_id and self.request.user.role == 'parent':
+            try:
+                parent = ParentProfile.objects.get(user=self.request.user)
+                children = parent.children.all()
+                if children.exists():
+                    student_id = children.first().pk
+            except ParentProfile.DoesNotExist:
+                pass
+        
+        if student_id:
+            report = ReportGenerator(school=school)
+            ctx['report'] = report.student_performance_report(student_id)
+            ctx['student'] = get_object_or_404(StudentProfile, pk=student_id)
+            ctx['terms'] = [t[0] for t in TERM_CHOICES]
+        
+        return ctx
+
+
+class ClassReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """View class performance report"""
+    template_name = "core/reports/class_report.html"
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        class_id = self.kwargs.get('class_id')
+        term = self.request.GET.get('term')
+        exam = self.request.GET.get('exam')
+        
+        report = ReportGenerator(
+            school=school,
+            class_level_id=class_id if class_id else None,
+            term=term,
+            exam=exam
+        )
+        
+        ctx['report'] = report.class_performance_report()
+        ctx['class_level'] = get_object_or_404(ClassLevel, pk=class_id, school=school) if class_id else None
+        ctx['terms'] = [t[0] for t in TERM_CHOICES]
+        ctx['exams'] = [e[0] for e in EXAM_CHOICES]
+        ctx['selected_term'] = term
+        ctx['selected_exam'] = exam
+        
+        return ctx
+
+
+class TermReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """View term performance report"""
+    template_name = "core/reports/term_report.html"
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        term = self.kwargs.get('term')
+        exam = self.request.GET.get('exam')
+        
+        report = ReportGenerator(
+            school=school,
+            term=term,
+            exam=exam
+        )
+        
+        ctx['report'] = report.term_report()
+        ctx['term'] = term
+        ctx['exam'] = exam
+        ctx['exams'] = [e[0] for e in EXAM_CHOICES]
+        
+        return ctx
+
+
+class SubjectReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """View subject performance report"""
+    template_name = "core/reports/subject_report.html"
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        subject_id = self.kwargs.get('subject_id')
+        term = self.request.GET.get('term')
+        
+        report = ReportGenerator(school=school, term=term)
+        ctx['report'] = report.subject_performance_report(subject_id)
+        ctx['subject'] = get_object_or_404(Subject, pk=subject_id, school=school) if subject_id else None
+        ctx['terms'] = [t[0] for t in TERM_CHOICES]
+        ctx['selected_term'] = term
+        
+        return ctx
+
+
+class MarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """View printable marksheet"""
+    template_name = "core/reports/marksheet.html"
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher', 'student', 'parent']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        student_id = self.kwargs.get('student_id')
+        term = self.request.GET.get('term')
+        
+        # If student viewing their own marksheet
+        if not student_id and self.request.user.role == 'student':
+            try:
+                student = StudentProfile.objects.get(user=self.request.user)
+                student_id = student.pk
+            except StudentProfile.DoesNotExist:
+                pass
+        
+        report = ReportGenerator(school=school)
+        marksheet = report.generate_marksheet(student_id, term)
+        
+        if not marksheet:
+            ctx['error'] = "No marks found for this student."
+        else:
+            ctx['marksheet'] = marksheet
+            ctx['student'] = get_object_or_404(StudentProfile, pk=student_id)
+            ctx['term'] = term
+            ctx['terms'] = [t[0] for t in TERM_CHOICES]
+        
+        return ctx
+
+
+# -------------------------------------------------------
+# Download/Export Views
+# -------------------------------------------------------
+
+class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Download report as PDF"""
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher']
+    
+    def get(self, request, report_type, item_id, *args, **kwargs):
+        school = request.user.school if request.user.role != 'system_admin' else None
+        
+        # Generate HTML from template
+        html_string = self._get_report_html(request, report_type, item_id, school)
+        
+        if not html_string:
+            return HttpResponse("Report not found", status=404)
+        
+        # Try to generate PDF
+        try:
+            from weasyprint import HTML, CSS
+            from weasyprint.text.fonts import FontConfiguration
+            
+            font_config = FontConfiguration()
+            html = HTML(string=html_string)
+            css = CSS(string='@page { size: A4; margin: 1cm; }')
+            pdf = html.write_pdf(font_config=font_config, stylesheets=[css])
+            
+            response = HttpResponse(pdf, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{report_type}_report_{item_id}.pdf"'
+            return response
+            
+        except ImportError:
+            # If weasyprint not installed, return HTML version
+            response = HttpResponse(html_string, content_type='text/html')
+            response['Content-Disposition'] = f'attachment; filename="{report_type}_report_{item_id}.html"'
+            return response
+    
+    def _get_report_html(self, request, report_type, item_id, school):
+        """Get HTML for the report"""
+        context = {}
+        report = ReportGenerator(school=school)
+        
+        if report_type == 'student':
+            context['report'] = report.student_performance_report(item_id)
+            context['student'] = get_object_or_404(StudentProfile, pk=item_id)
+            context['is_pdf'] = True
+            template = 'core/reports/student_report.html'
+        
+        elif report_type == 'class':
+            context['report'] = report.class_performance_report()
+            context['class_level'] = get_object_or_404(ClassLevel, pk=item_id, school=school)
+            context['school'] = school
+            context['is_pdf'] = True
+            template = 'core/reports/class_report.html'
+        
+        elif report_type == 'term':
+            context['report'] = report.term_report()
+            context['term'] = item_id
+            context['exam'] = request.GET.get('exam')
+            context['is_pdf'] = True
+            template = 'core/reports/term_report.html'
+        
+        elif report_type == 'subject':
+            context['report'] = report.subject_performance_report(item_id)
+            context['subject'] = get_object_or_404(Subject, pk=item_id, school=school)
+            context['is_pdf'] = True
+            template = 'core/reports/subject_report.html'
+        
+        elif report_type == 'marksheet':
+            marksheet = report.generate_marksheet(item_id, request.GET.get('term'))
+            if not marksheet:
+                return None
+            context['marksheet'] = marksheet
+            context['student'] = get_object_or_404(StudentProfile, pk=item_id)
+            context['term'] = request.GET.get('term')
+            context['is_pdf'] = True
+            template = 'core/reports/marksheet.html'
+        
+        else:
+            return None
+        
+        return render_to_string(template, context, request)
+
+
+class ExportReportJSONView(LoginRequiredMixin, RoleRequiredMixin, View):
+    """Export report as JSON"""
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
+    
+    def get(self, request, report_type, item_id, *args, **kwargs):
+        school = request.user.school if request.user.role != 'system_admin' else None
+        report = ReportGenerator(school=school)
+        
+        data = {}
+        
+        if report_type == 'student':
+            data = report.student_performance_report(item_id)
+        elif report_type == 'class':
+            data = report.class_performance_report()
+        elif report_type == 'term':
+            data = report.term_report()
+        elif report_type == 'subject':
+            data = report.subject_performance_report(item_id)
+        elif report_type == 'marksheet':
+            data = report.generate_marksheet(item_id, request.GET.get('term'))
+        else:
+            return HttpResponse("Invalid report type", status=400)
+        
+        if not data:
+            return HttpResponse("No data found", status=404)
+        
+        return JsonResponse(data, safe=False)
+
+
+class PrintMarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """View for printing marksheet (no sidebar, print-friendly)"""
+    template_name = "core/reports/print_marksheet.html"
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher', 'student', 'parent']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        student_id = self.kwargs.get('student_id')
+        term = self.request.GET.get('term')
+        
+        # If student viewing their own marksheet
+        if not student_id and self.request.user.role == 'student':
+            try:
+                student = StudentProfile.objects.get(user=self.request.user)
+                student_id = student.pk
+            except StudentProfile.DoesNotExist:
+                pass
+        
+        report = ReportGenerator(school=school)
+        marksheet = report.generate_marksheet(student_id, term)
+        
+        if not marksheet:
+            ctx['error']
+
+# ============================================================
+# Performance Analytics View
+# ============================================================
+
+class PerformanceAnalyticsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """View for performance analytics and charts"""
+    template_name = "core/reports/analytics.html"
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        
+        school = self.get_school()
+        term = self.request.GET.get('term')
+        exam = self.request.GET.get('exam')
+        
+        # Get all marks
+        marks = Mark.objects.filter(school=school)
+        if term:
+            marks = marks.filter(term=term)
+        if exam:
+            marks = marks.filter(exam=exam)
+        
+        # Overall stats
+        total_students = StudentProfile.objects.filter(school=school).count()
+        total_marks = marks.count()
+        avg_score = mark_average(marks)
+        
+        # Grade distribution
+        grade_dist = {}
+        for grade in ['A', 'B', 'C', 'D', 'F']:
+            # Count marks with this grade
+            grade_marks = [m for m in marks if m.grade == grade]
+            count = len(grade_marks)
+            if count > 0:
+                grade_dist[grade] = {
+                    'count': count,
+                    'percentage': (count / total_marks * 100) if total_marks > 0 else 0
+                }
+        
+        # Subject performance
+        subject_performance = []
+        subjects = Subject.objects.filter(school=school)
+        for subject in subjects:
+            subject_marks = marks.filter(subject=subject)
+            if subject_marks.exists():
+                subject_performance.append({
+                    'name': subject.name,
+                    'average': mark_average(subject_marks),
+                    'count': subject_marks.count(),
+                    'highest': subject_marks.annotate(total=total_expr()).order_by('-total').first(),
+                    'lowest': subject_marks.annotate(total=total_expr()).order_by('total').first(),
+                })
+        
+        # Class performance
+        class_performance = []
+        classes = ClassLevel.objects.filter(school=school)
+        for class_level in classes:
+            class_students = StudentProfile.objects.filter(school=school, class_level=class_level)
+            class_marks = marks.filter(student__in=class_students)
+            if class_marks.exists():
+                class_performance.append({
+                    'name': class_level.name,
+                    'average': mark_average(class_marks),
+                    'count': class_marks.count(),
+                    'students': class_students.count(),
+                })
+        
+        # Top performers
+        top_performers = []
+        students = StudentProfile.objects.filter(school=school)
+        for student in students:
+            student_marks = marks.filter(student=student)
+            if student_marks.exists():
+                avg = mark_average(student_marks)
+                if avg > 0:
+                    top_performers.append({
+                        'student': student,
+                        'average': avg,
+                        'points': sum(m.grade_points for m in student_marks),
+                        'marks': student_marks.count(),
+                    })
+        top_performers = sorted(top_performers, key=lambda x: x['average'], reverse=True)[:10]
+        
+        ctx['marks'] = marks
+        ctx['total_marks'] = total_marks
+        ctx['total_students'] = total_students
+        ctx['avg_score'] = avg_score
+        ctx['grade_distribution'] = grade_dist
+        ctx['subject_performance'] = subject_performance
+        ctx['class_performance'] = class_performance
+        ctx['top_performers'] = top_performers
+        ctx['terms'] = [t[0] for t in TERM_CHOICES]
+        ctx['exams'] = [e[0] for e in EXAM_CHOICES]
+        ctx['selected_term'] = term
+        ctx['selected_exam'] = exam
+        
+        return ctx

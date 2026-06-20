@@ -1,36 +1,31 @@
-from pathlib import Path
 import os
 import dj_database_url
+from pathlib import Path
+from decouple import config
 
-# ---------------------------------------------------------------------------
+# ============================================================
 # Paths
-# ---------------------------------------------------------------------------
+# ============================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# ---------------------------------------------------------------------------
+# ============================================================
 # Security
-# ---------------------------------------------------------------------------
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    'django-insecure-dev-fallback-replace-before-production'
-)
+# ============================================================
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-key-change-me-in-production')
 
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = [
-    h.strip() for h in
-    os.environ.get('ALLOWED_HOSTS', '').split(',')
-    if h.strip()
-] or [
-    'school-management-d21p.onrender.com',
+    'school-management-system.onrender.com',
     '.onrender.com',
     'localhost',
     '127.0.0.1',
+    '0.0.0.0',
 ]
 
-# ---------------------------------------------------------------------------
-# Application definition
-# ---------------------------------------------------------------------------
+# ============================================================
+# Application Definition
+# ============================================================
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -40,6 +35,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'import_export',
     'core',
+    'core.templatetags',
 ]
 
 MIDDLEWARE = [
@@ -54,8 +50,6 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'config.urls'
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
 
 TEMPLATES = [
     {
@@ -68,6 +62,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'django.template.context_processors.media',
             ],
         },
     },
@@ -75,48 +70,58 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# ---------------------------------------------------------------------------
+# ============================================================
 # Database
-# ---------------------------------------------------------------------------
+# ============================================================
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.getenv(
-            "DATABASE_URL",
-            "sqlite:///db.sqlite3"
-        ),
+        default=os.getenv("DATABASE_URL", "sqlite:///db.sqlite3"),
         conn_max_age=600,
+        ssl_require=not DEBUG,  # Require SSL in production
     )
 }
 
-# ---------------------------------------------------------------------------
-# Auth
-# ---------------------------------------------------------------------------
+# ============================================================
+# Auth - Custom User Model
+# ============================================================
 AUTH_USER_MODEL = 'core.User'
 
 AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 8,
+        }
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
 ]
 
-LOGIN_URL           = '/accounts/login/'
-LOGIN_REDIRECT_URL  = '/'
-LOGOUT_REDIRECT_URL = '/accounts/login/'
+LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/login/'
 
-# ---------------------------------------------------------------------------
-# Internationalisation
-# ---------------------------------------------------------------------------
+# ============================================================
+# Internationalization
+# ============================================================
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE     = 'Africa/Kampala'
-USE_I18N      = True
-USE_TZ        = True
+TIME_ZONE = 'Africa/Kampala'
+USE_I18N = True
+USE_TZ = True
 
-# ---------------------------------------------------------------------------
-# Static files
-# ---------------------------------------------------------------------------
-STATIC_URL  = '/static/'
+# ============================================================
+# Static Files
+# ============================================================
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else []
 
 STORAGES = {
     'default': {
@@ -127,30 +132,73 @@ STORAGES = {
     },
 }
 
-_local_static = BASE_DIR / 'static'
-STATICFILES_DIRS = [_local_static] if _local_static.exists() else []
+# ============================================================
+# Media Files
+# ============================================================
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
-# ---------------------------------------------------------------------------
-# Security hardening for production
-# ---------------------------------------------------------------------------
+# ============================================================
+# Security Settings for Production
+# ============================================================
 if not DEBUG:
-    CSRF_TRUSTED_ORIGINS = [
-        'https://school-management-d21p.onrender.com',
-        'https://*.onrender.com',
-    ]
+    # HTTPS Security
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-    SESSION_COOKIE_SECURE   = True
-    CSRF_COOKIE_SECURE      = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    
+    # HSTS (HTTP Strict Transport Security)
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    
+    # Other Security Headers
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'
+    
+    # CSRF Trusted Origins
+    CSRF_TRUSTED_ORIGINS = [
+        'https://*.onrender.com',
+        'https://*.render.com',
+    ]
 
-# ---------------------------------------------------------------------------
-# Logging — prints full tracebacks to Render log stream
-# ---------------------------------------------------------------------------
+# ============================================================
+# CORS Headers (if needed)
+# ============================================================
+# CORS_ALLOWED_ORIGINS = [
+#     'https://*.onrender.com',
+# ]
+
+# ============================================================
+# Email Configuration
+# ============================================================
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend'
+)
+
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@schoolms.com')
+
+# ============================================================
+# Logging
+# ============================================================
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'debug.log',
         },
     },
     'root': {
@@ -168,10 +216,37 @@ LOGGING = {
             'level': 'ERROR',
             'propagate': False,
         },
+        'core': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG' if DEBUG else 'ERROR',
+            'propagate': False,
+        },
     },
 }
 
-# ---------------------------------------------------------------------------
-# Misc
-# ---------------------------------------------------------------------------
+# ============================================================
+# Session & Cache Settings
+# ============================================================
+SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
+SESSION_COOKIE_SAMESITE = 'Lax'
+
+# ============================================================
+# Misc Settings
+# ============================================================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Custom Settings
+SITE_NAME = 'School Management System'
+SITE_DESCRIPTION = 'A comprehensive school management platform'
+
+# ============================================================
+# Django Debug Toolbar (Development Only)
+# ============================================================
+if DEBUG:
+    try:
+        import debug_toolbar
+        INSTALLED_APPS.append('debug_toolbar')
+        MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+        INTERNAL_IPS = ['127.0.0.1', 'localhost']
+    except ImportError:
+        pass

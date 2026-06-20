@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Superuser Dashboard{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">System Dashboard</h1>
+    <p class="text-gray-600">Welcome, {{ request.user.get_full_name|default:request.user.username }}</p>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-600">Schools</p>
+                <p class="text-2xl font-bold text-gray-800">{{ school_count }}</p>
+            </div>
+            <i class="fas fa-school text-blue-500 text-3xl"></i>
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-600">Students</p>
+                <p class="text-2xl font-bold text-gray-800">{{ student_count }}</p>
+            </div>
+            <i class="fas fa-user-graduate text-green-500 text-3xl"></i>
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-purple-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-600">Staff</p>
+                <p class="text-2xl font-bold text-gray-800">{{ staff_count }}</p>
+            </div>
+            <i class="fas fa-chalkboard-teacher text-purple-500 text-3xl"></i>
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-600">Average Score</p>
+                <p class="text-2xl font-bold text-gray-800">{{ avg_score|floatformat:1 }}%</p>
+            </div>
+            <i class="fas fa-chart-line text-yellow-500 text-3xl"></i>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Access - Reports -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <a href="{% url 'core:analytics' %}" class="bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg shadow-md p-6 hover:shadow-lg transition text-center">
+        <i class="fas fa-chart-pie text-3xl mb-2"></i>
+        <h3 class="text-lg font-semibold">Analytics</h3>
+        <p class="text-sm text-purple-100">View performance analytics</p>
+    </a>
+    <a href="{% url 'core:term_report' 'Term 1' %}" class="bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-md p-6 hover:shadow-lg transition text-center">
+        <i class="fas fa-calendar-alt text-3xl mb-2"></i>
+        <h3 class="text-lg font-semibold">Term Reports</h3>
+        <p class="text-sm text-blue-100">View term performance</p>
+    </a>
+    <a href="{% url 'core:school_marks' %}" class="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg shadow-md p-6 hover:shadow-lg transition text-center">
+        <i class="fas fa-chart-bar text-3xl mb-2"></i>
+        <h3 class="text-lg font-semibold">All Marks</h3>
+        <p class="text-sm text-green-100">View all student marks</p>
+    </a>
+    <a href="/admin/" class="bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-lg shadow-md p-6 hover:shadow-lg transition text-center">
+        <i class="fas fa-cog text-3xl mb-2"></i>
+        <h3 class="text-lg font-semibold">Admin Panel</h3>
+        <p class="text-sm text-gray-100">Manage system</p>
+    </a>
+</div>
+
+<!-- Schools List -->
+<div class="bg-white rounded-lg shadow-md p-6 mb-8">
+    <h2 class="text-xl font-bold text-gray-800 mb-4">Schools</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for school in schools %}
+        <div class="border rounded-lg p-4 hover:shadow-lg transition">
+            <h3 class="font-semibold text-gray-800">{{ school.name }}</h3>
+            <p class="text-sm text-gray-600">{{ school.code }}</p>
+            <p class="text-sm text-gray-600">{{ school.address|default:"No address" }}</p>
+        </div>
+        {% empty %}
+        <p class="text-gray-500">No schools found.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Recent Marks -->
+<div class="bg-white rounded-lg shadow-md p-6">
+    <h2 class="text-xl font-bold text-gray-800 mb-4">Recent Marks</h2>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Student</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Subject</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Term</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Total</th>
+                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-600">Grade</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mark in recent_marks %}
+                <tr class="border-t">
+                    <td class="px-4 py-2 text-sm">{{ mark.student.user.get_full_name }}</td>
+                    <td class="px-4 py-2 text-sm">{{ mark.subject.name }}</td>
+                    <td class="px-4 py-2 text-sm">{{ mark.term }}</td>
+                    <td class="px-4 py-2 text-sm">{{ mark.total_score|floatformat:1 }}</td>
+                    <td class="px-4 py-2 text-sm font-bold">{{ mark.grade }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="px-4 py-2 text-gray-500">No marks found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
