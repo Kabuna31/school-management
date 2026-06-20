@@ -3,9 +3,29 @@ services:
     name: school-management-system
     env: python
     buildCommand: |
-      pip install --upgrade pip
-      pip install django django-import-export dj-database-url whitenoise psycopg2-binary pillow gunicorn
+      pip install -r requirements.txt
       python manage.py collectstatic --noinput
-      python manage.py makemigrations
+      python manage.py makemigrations core
+      python manage.py migrate core --fake-initial
+      python manage.py migrate --fake-initial
+      python manage.py migrate core --fake
       python manage.py migrate
+      python manage.py showmigrations
     startCommand: gunicorn config.wsgi:application
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: school_db
+          property: connectionString
+      - key: ALLOWED_HOSTS
+        value: "school-management-system.onrender.com,.onrender.com"
+
+databases:
+  - name: school_db
+    databaseName: school_db
+    user: school_user
+    plan: free
