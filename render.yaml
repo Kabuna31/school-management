@@ -3,14 +3,19 @@ services:
     name: school-management-system
     env: python
     buildCommand: |
+      echo "Installing dependencies..."
       pip install -r requirements.txt
+      
+      echo "Collecting static files..."
       python manage.py collectstatic --noinput
-      python manage.py makemigrations core
-      python manage.py migrate core --fake-initial
-      python manage.py migrate --fake-initial
-      python manage.py migrate core --fake
+      
+      echo "Making migrations..."
+      python manage.py makemigrations
+      
+      echo "Applying migrations..."
       python manage.py migrate
-      python manage.py showmigrations
+      
+      echo "Build completed successfully!"
     startCommand: gunicorn config.wsgi:application
     envVars:
       - key: DJANGO_SECRET_KEY
@@ -22,7 +27,7 @@ services:
           name: school_db
           property: connectionString
       - key: ALLOWED_HOSTS
-        value: "school-management-system.onrender.com,.onrender.com"
+        value: "school-management-system.onrender.com,.onrender.com,localhost,127.0.0.1"
 
 databases:
   - name: school_db
