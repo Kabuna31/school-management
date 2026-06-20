@@ -1,30 +1,11 @@
-@'
 services:
   - type: web
     name: school-management-system
     env: python
-    runtime: python
     buildCommand: |
-      pip install -r requirements.txt
+      pip install --upgrade pip
+      pip install django django-import-export dj-database-url whitenoise psycopg2-binary pillow gunicorn
       python manage.py collectstatic --noinput
       python manage.py makemigrations
       python manage.py migrate
     startCommand: gunicorn config.wsgi:application
-    envVars:
-      - key: DJANGO_SECRET_KEY
-        generateValue: true
-      - key: DJANGO_DEBUG
-        value: "False"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: school_db
-          property: connectionString
-      - key: ALLOWED_HOSTS
-        value: "school-management-system.onrender.com,.onrender.com"
-
-databases:
-  - name: school_db
-    databaseName: school_db
-    user: school_user
-    plan: free
-'@ | Out-File -Encoding utf8 render.yaml
