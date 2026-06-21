@@ -396,6 +396,19 @@ class StreamAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     list_filter = ('school',)
     search_fields = ('name',)
     
+    def save_model(self, request, obj, form, change):
+        if not obj.school:
+            if request.user.school:
+                obj.school = request.user.school
+            else:
+                school = School.objects.first()
+                if school:
+                    obj.school = school
+                else:
+                    messages.error(request, "No school exists. Please create one first.")
+                    return
+        super().save_model(request, obj, form, change)
+    
     @admin.display(description='Students')
     def student_count(self, obj):
         return StudentProfile.objects.filter(stream=obj).count()
@@ -410,6 +423,19 @@ class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     list_filter = ('school',)
     search_fields = ('name',)
     autocomplete_fields = ('class_teacher',)
+    
+    def save_model(self, request, obj, form, change):
+        if not obj.school:
+            if request.user.school:
+                obj.school = request.user.school
+            else:
+                school = School.objects.first()
+                if school:
+                    obj.school = school
+                else:
+                    messages.error(request, "No school exists. Please create one first.")
+                    return
+        super().save_model(request, obj, form, change)
     
     @admin.display(description='Students')
     def student_count(self, obj):
@@ -426,6 +452,19 @@ class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     search_fields = ('name', 'code')
     ordering = ('school', 'name')
     
+    def save_model(self, request, obj, form, change):
+        if not obj.school:
+            if request.user.school:
+                obj.school = request.user.school
+            else:
+                school = School.objects.first()
+                if school:
+                    obj.school = school
+                else:
+                    messages.error(request, "No school exists. Please create one first.")
+                    return
+        super().save_model(request, obj, form, change)
+    
     @admin.display(description='Avg Total')
     def avg_total(self, obj):
         avg = Mark.objects.filter(subject=obj).annotate(
@@ -437,7 +476,6 @@ class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
         return format_html(
             '<strong style="color:{}">{}</strong>', color, f"{avg:.1f}",
         )
-
 
 # ── EmployeeProfile ────────────────────────────────────────────────────────
 
