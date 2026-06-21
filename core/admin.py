@@ -100,45 +100,60 @@ class SchoolScopedMixin:
         )
 
     def _user_school(self, request):
-    """Get user's school with fallback"""
-    school = getattr(request.user, "school", None)
-    
-    # If user has no school, try to assign the first available school
-    if not school and request.user.is_authenticated:
-        from .models import School
-        school = School.objects.first()
-        if school:
-            request.user.school = school
-            request.user.save(update_fields=['school'])
-            messages.info(request, f"Auto-assigned to school: {school.name}")
-    
-    return school
+        """Get user's school with fallback to first school"""
+        school = getattr(request.user, "school", None)
+        
+        # If user has no school, try to assign the first available school
+        if not school and request.user.is_authenticated:
+            from .models import School
+            school = School.objects.first()
+            if school:
+                request.user.school = school
+                request.user.save(update_fields=['school'])
+                messages.info(request, f"Auto-assigned to school: {school.name}")
+        
+        return school
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+
+        if self._is_scoped(request):
+            school = self._user_school(request)
+
+            if school:
+                qs = qs.filter(**{
+                    self.school_field: school
+                })
+            else:
+                qs = qs.none()
+
+        return qs
 
     def save_model(self, request, obj, form, change):
-    # Ensure school is always set
-    if not obj.school:
-        obj.school = getattr(request.user, "school", None)
-    
-    if not obj.school:
-        from .models import School
-        obj.school = School.objects.first()
-    
-    if not obj.school:
-        messages.error(request, "No school exists. Please create a school first.")
-        return
-    
-    if obj.role == 'system_admin':
-        if not change:
-            obj.role = 'school_admin'
-        obj.is_superuser = change
-        obj.is_staff = True
-    else:
-        obj.is_superuser = False
-        obj.is_staff = True
-        
-    super().save_model(request, obj, form, change)
+        """Auto-assign school from user's profile if available"""
+        if hasattr(obj, "school"):
+            if self._is_scoped(request):
+                school = self._user_school(request)
 
+                if not school:
+                    messages.error(
+                        request,
+                        "Your account is not linked to a school, "
+                        "and no school exists in the system. "
+                        "Please create a school first."
+                    )
+                    return
+                else:
+                    obj.school = school
 
+            elif not obj.school:
+                messages.error(
+                    request,
+                    "School is required. Please select a school."
+                )
+                return
+
+        super().save_model(request, obj, form, change)
 
     def get_fields(self, request, obj=None):
         fields = list(super().get_fields(request, obj))
@@ -186,7 +201,16 @@ class SchoolScopedInline(admin.StackedInline):
         )
 
     def _user_school(self, request):
-        return getattr(request.user, "school", None)
+        school = getattr(request.user, "school", None)
+        
+        if not school and request.user.is_authenticated:
+            from .models import School
+            school = School.objects.first()
+            if school:
+                request.user.school = school
+                request.user.save(update_fields=['school'])
+        
+        return school
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -204,15 +228,20 @@ class SchoolScopedInline(admin.StackedInline):
                 school = self._user_school(request)
 
                 if not school:
-                    first_school = School.objects.first()
-                    if first_school:
-                        obj.school = first_school
-                    else:
-                        return
+                    messages.error(
+                        request,
+                        "Your account is not linked to a school. "
+                        "Please contact the administrator."
+                    )
+                    return
 
                 obj.school = school
 
             elif not obj.school:
+                messages.error(
+                    request,
+                    "School is required. Please select a school."
+                )
                 return
 
         super().save_model(request, obj, form, change)
@@ -308,8 +337,17 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
         return qs
 
     def save_model(self, request, obj, form, change):
-        if self._is_scoped(request):
-            obj.school = request.user.school
+        # Ensure school is always set
+        if not obj.school:
+            obj.school = getattr(request.user, "school", None)
+        
+        if not obj.school:
+            from .models import School
+            obj.school = School.objects.first()
+        
+        if not obj.school:
+            messages.error(request, "No school exists. Please create a school first.")
+            return
         
         if obj.role == 'system_admin':
             if not change:
