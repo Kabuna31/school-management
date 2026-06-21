@@ -119,28 +119,28 @@ class SchoolScopedMixin:
         return qs
 
     def save_model(self, request, obj, form, change):
-        """Auto-assign school from user's profile"""
-        if hasattr(obj, "school"):
-            # For scoped users, auto-assign from user
-            if self._is_scoped(request):
-                school = self._user_school(request)
+    """Auto-assign school from user's profile"""
+    if hasattr(obj, "school"):
+        # For scoped users, auto-assign from user
+        if self._is_scoped(request):
+            school = self._user_school(request)
+            if school:
+                obj.school = school
+            else:
+                messages.error(request, "You are not associated with a school.")
+                return
+        else:
+            # For superusers, if no school is selected, use first school
+            if not obj.school_id:
+                from .models import School
+                school = School.objects.first()
                 if school:
                     obj.school = school
                 else:
-                    messages.error(request, "You are not associated with a school.")
+                    messages.error(request, "No school exists. Please create one first.")
                     return
-            else:
-                # For superusers, if no school is selected, use first school
-                if not obj.school_id and not obj.school:
-                    from .models import School
-                    school = School.objects.first()
-                    if school:
-                        obj.school = school
-                    else:
-                        messages.error(request, "No school exists. Please create one first.")
-                        return
 
-        super().save_model(request, obj, form, change)
+    super().save_model(request, obj, form, change)
 
     def get_fields(self, request, obj=None):
         fields = list(super().get_fields(request, obj))
