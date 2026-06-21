@@ -14,7 +14,7 @@ class UserResource(resources.ModelResource):
     """
     Import rules:
       - Plain-text passwords are hashed automatically.
-      - Blank password → unusable password (admin resets later).
+      - Blank password → default password 'default123' (admin resets later).
       - system_admin role can only be imported by a superuser;
         otherwise the role is silently downgraded to school_admin.
       - is_superuser and is_staff flags are set correctly after each row.
@@ -51,7 +51,7 @@ class UserResource(resources.ModelResource):
     def before_import_row(self, row, **kwargs):
         """
         1. Block non-superusers from importing system_admin accounts.
-        2. Hash plain-text passwords; set unusable password if blank.
+        2. Hash plain-text passwords; set default password if blank.
         """
         # ── Role protection ───────────────────────────────────────────────
         request = kwargs.get('user')   # django-import-export passes request user here
@@ -64,8 +64,8 @@ class UserResource(resources.ModelResource):
         # ── Password hashing ──────────────────────────────────────────────
         password = (row.get('password') or '').strip()
         if not password:
-            # No password supplied → unusable until reset
-            row['password'] = make_password(None)
+            # No password supplied → use default password
+            row['password'] = make_password('default123')
         elif not password.startswith(('pbkdf2_sha256$', 'bcrypt$', 'argon2')):
             # Plain text → hash it
             row['password'] = make_password(password)
@@ -350,3 +350,19 @@ class TimetableResource(resources.ModelResource):
         )
         skip_unchanged   = True
         report_skipped   = True
+
+
+# ── Exports ────────────────────────────────────────────────────────────────
+
+__all__ = [
+    'UserResource',
+    'SchoolResource',
+    'EmployeeProfileResource',
+    'ParentProfileResource',
+    'StreamResource',
+    'ClassLevelResource',
+    'StudentProfileResource',
+    'SubjectResource',
+    'MarkResource',
+    'TimetableResource',
+]
