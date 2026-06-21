@@ -2,7 +2,6 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views import View
 from django.views.generic import TemplateView, RedirectView
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.decorators import login_required
 from django.db.models import (
     Avg,
     Count,
@@ -11,15 +10,12 @@ from django.db.models import (
     ExpressionWrapper,
     Sum,
     Q,
-    Max,
-    Min,
 )
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.http import HttpResponseForbidden, HttpResponseRedirect, JsonResponse, HttpResponse
 from django.contrib.auth.views import LoginView
 from django.template.loader import render_to_string
-from django.core.paginator import Paginator
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
@@ -52,7 +48,6 @@ def fix_school_view(request):
     """One-time view to fix school assignment for all users"""
     html = "<h1>Fixing School Assignment</h1>"
     
-    # Create school if none exists
     school = School.objects.first()
     if not school:
         school = School.objects.create(
@@ -66,7 +61,6 @@ def fix_school_view(request):
     else:
         html += f"<p>✅ Found school: {school.name}</p>"
     
-    # Assign all users to school
     count = 0
     for user in User.objects.filter(school__isnull=True):
         user.school = school
@@ -133,7 +127,6 @@ class CreateAdminView(View):
     def get(self, request):
         User = get_user_model()
         
-        # Check if admin exists
         if User.objects.filter(username='admin').exists():
             return HttpResponse("""
                 <h1>✅ Admin already exists!</h1>
@@ -142,7 +135,6 @@ class CreateAdminView(View):
                 <p><a href="/login/">Go to Login</a></p>
             """)
         
-        # Create admin
         User.objects.create_superuser(
             username='admin',
             email='admin@school.com',
@@ -162,7 +154,6 @@ class CreateAdminView(View):
 # ============================================================
 
 class CustomLoginView(LoginView):
-    """Custom login view that redirects based on role"""
     template_name = 'registration/login.html'
     
     def get_success_url(self):
@@ -186,7 +177,6 @@ class CustomLoginView(LoginView):
 # ============================================================
 
 class RoleRequiredMixin:
-    """Mixin to require specific user roles"""
     required_roles = []
     
     def dispatch(self, request, *args, **kwargs):
@@ -196,7 +186,6 @@ class RoleRequiredMixin:
         if not self.required_roles:
             return super().dispatch(request, *args, **kwargs)
         
-        # Superusers and system admins can access everything
         if request.user.is_superuser or request.user.role == 'system_admin':
             return super().dispatch(request, *args, **kwargs)
         
@@ -209,16 +198,12 @@ class RoleRequiredMixin:
 
 
 class SchoolScopedMixin:
-    """Mixin to ensure user only accesses their school's data"""
-    
     def get_school(self):
-        """Get the school for the current user"""
         if hasattr(self.request.user, 'school'):
             return self.request.user.school
         return None
     
     def dispatch(self, request, *args, **kwargs):
-        # Superusers can access everything
         if request.user.role == 'system_admin' or request.user.is_superuser:
             return super().dispatch(request, *args, **kwargs)
         
@@ -233,8 +218,6 @@ class SchoolScopedMixin:
 # ============================================================
 
 class RoleRedirectView(View):
-    """Redirect users to their appropriate dashboard based on role"""
-    
     def get(self, request):
         if not request.user.is_authenticated:
             return redirect('core:login')
@@ -251,12 +234,7 @@ class RoleRedirectView(View):
             "bursar": "core:bursar_dashboard",
         }
         
-        redirect_url = role_map.get(
-            request.user.role,
-            "admin:index"
-        )
-        
-        return redirect(redirect_url)
+        return redirect(role_map.get(request.user.role, "admin:index"))
 
 
 # ============================================================
@@ -264,15 +242,12 @@ class RoleRedirectView(View):
 # ============================================================
 
 class SuperuserDashboardView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
-    """Dashboard for system administrators"""
     template_name = "core/dashboard/superuser.html"
     required_roles = ['system_admin']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         marks = Mark.objects.select_related("student", "subject")
-        
         ctx["school_count"] = School.objects.count()
         ctx["student_count"] = StudentProfile.objects.count()
         ctx["staff_count"] = EmployeeProfile.objects.count()
@@ -281,24 +256,19 @@ class SuperuserDashboardView(LoginRequiredMixin, RoleRequiredMixin, TemplateView
         ctx["avg_score"] = mark_average(marks)
         ctx["recent_marks"] = marks.order_by("-id")[:10]
         ctx["schools"] = School.objects.all()
-        
         return ctx
 
 
 class SchooladminDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """Dashboard for school administrators"""
     template_name = "core/dashboard/school_admin.html"
     required_roles = ['school_admin']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         if not school:
             return ctx
-        
         marks = Mark.objects.filter(school=school)
-        
         ctx["school"] = school
         ctx["student_count"] = StudentProfile.objects.filter(school=school).count()
         ctx["staff_count"] = EmployeeProfile.objects.filter(school=school).count()
@@ -306,28 +276,21 @@ class SchooladminDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScop
         ctx["subject_count"] = Subject.objects.filter(school=school).count()
         ctx["mark_count"] = marks.count()
         ctx["avg_score"] = mark_average(marks)
-        ctx["recent_marks"] = marks.select_related(
-            "student", "subject", "teacher"
-        ).order_by("-id")[:10]
+        ctx["recent_marks"] = marks.select_related("student", "subject", "teacher").order_by("-id")[:10]
         ctx["classes"] = ClassLevel.objects.filter(school=school)
-        
         return ctx
 
 
 class HeadteacherDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """Dashboard for headteachers"""
     template_name = "core/dashboard/headteacher.html"
     required_roles = ['headteacher']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         if not school:
             return ctx
-        
         marks = Mark.objects.filter(school=school)
-        
         ctx["school"] = school
         ctx["student_count"] = StudentProfile.objects.filter(school=school).count()
         ctx["staff_count"] = EmployeeProfile.objects.filter(school=school).count()
@@ -335,28 +298,21 @@ class HeadteacherDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScop
         ctx["subject_count"] = Subject.objects.filter(school=school).count()
         ctx["mark_count"] = marks.count()
         ctx["avg_score"] = mark_average(marks)
-        ctx["recent_marks"] = marks.select_related(
-            "student", "subject", "teacher"
-        ).order_by("-id")[:10]
+        ctx["recent_marks"] = marks.select_related("student", "subject", "teacher").order_by("-id")[:10]
         ctx["classes"] = ClassLevel.objects.filter(school=school)
-        
         return ctx
 
 
 class DOSDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """Dashboard for Director of Studies"""
     template_name = "core/dashboard/dos.html"
     required_roles = ['dos']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         if not school:
             return ctx
-        
         marks = Mark.objects.filter(school=school)
-        
         ctx["school"] = school
         ctx["student_count"] = StudentProfile.objects.filter(school=school).count()
         ctx["staff_count"] = EmployeeProfile.objects.filter(school=school).count()
@@ -364,32 +320,24 @@ class DOSDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin,
         ctx["subject_count"] = Subject.objects.filter(school=school).count()
         ctx["mark_count"] = marks.count()
         ctx["avg_score"] = mark_average(marks)
-        ctx["recent_marks"] = marks.select_related(
-            "student", "subject", "teacher"
-        ).order_by("-id")[:10]
+        ctx["recent_marks"] = marks.select_related("student", "subject", "teacher").order_by("-id")[:10]
         ctx["classes"] = ClassLevel.objects.filter(school=school)
-        
         return ctx
 
 
 class TeacherDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """Dashboard for teachers"""
     template_name = "core/dashboard/teacher.html"
     required_roles = ['teacher', 'class_teacher']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         if not school:
             return ctx
         
         try:
             teacher = EmployeeProfile.objects.get(user=self.request.user)
-            marks = Mark.objects.filter(
-                school=school,
-                teacher=teacher
-            )
+            marks = Mark.objects.filter(school=school, teacher=teacher)
             ctx["my_marks_count"] = marks.count()
             ctx["my_avg_score"] = mark_average(marks)
         except EmployeeProfile.DoesNotExist:
@@ -399,72 +347,54 @@ class TeacherDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMi
         ctx["school"] = school
         ctx["student_count"] = StudentProfile.objects.filter(school=school).count()
         ctx["subject_count"] = Subject.objects.filter(school=school).count()
-        
         return ctx
 
 
 class BursarDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """Dashboard for bursars"""
     template_name = "core/dashboard/bursar.html"
     required_roles = ['bursar']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         if not school:
             return ctx
-        
         ctx["school"] = school
         ctx["student_count"] = StudentProfile.objects.filter(school=school).count()
         ctx["staff_count"] = EmployeeProfile.objects.filter(school=school).count()
-        
         return ctx
 
 
 class StudentDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """Dashboard for students"""
     template_name = "core/dashboard/student.html"
     required_roles = ['student']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         try:
-            student = StudentProfile.objects.select_related(
-                "class_level", "stream"
-            ).get(user=self.request.user)
-            
-            marks = Mark.objects.filter(
-                student=student
-            ).select_related("subject")
-            
+            student = StudentProfile.objects.select_related("class_level", "stream").get(user=self.request.user)
+            marks = Mark.objects.filter(student=student).select_related("subject")
             ctx["student"] = student
             ctx["marks"] = marks
             ctx["avg_score"] = mark_average(marks)
             ctx["total_points"] = sum([m.grade_points for m in marks])
-            
         except StudentProfile.DoesNotExist:
             ctx["student"] = None
             ctx["marks"] = []
             ctx["avg_score"] = 0
             ctx["total_points"] = 0
-        
         return ctx
 
 
 class ParentDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """Dashboard for parents"""
     template_name = "core/dashboard/parent.html"
     required_roles = ['parent']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         try:
             parent = ParentProfile.objects.get(user=self.request.user)
             children = parent.children.all().prefetch_related("mark_set")
-            
             rows = []
             for child in children:
                 marks = Mark.objects.filter(student=child)
@@ -473,14 +403,11 @@ class ParentDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
                     "average": mark_average(marks),
                     "points": sum([m.grade_points for m in marks])
                 })
-            
             ctx["children"] = rows
             ctx["parent"] = parent
-            
         except ParentProfile.DoesNotExist:
             ctx["children"] = []
             ctx["parent"] = None
-        
         return ctx
 
 
@@ -489,7 +416,6 @@ class ParentDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
 # ============================================================
 
 class TeacherMarkEntryView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
-    """View for entering marks"""
     template_name = "core/teacher_mark_entry.html"
     required_roles = MARK_ENTRY_ROLES
     
@@ -541,7 +467,6 @@ class TeacherMarkEntryView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMi
             "selected_exam": selected_exam,
             "success": request.GET.get("success"),
         }
-        
         return render(request, self.template_name, context)
     
     def post(self, request):
@@ -615,25 +540,18 @@ class TeacherMarkEntryView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMi
 
 
 class SchoolMarksView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """View for viewing all marks in a school"""
     template_name = "core/school_admin/marks.html"
     required_roles = MARK_MANAGE_ROLES
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         if not school:
             return ctx
-        
-        marks = Mark.objects.filter(
-            school=school
-        ).select_related("student", "subject", "teacher")
-        
+        marks = Mark.objects.filter(school=school).select_related("student", "subject", "teacher")
         term = self.request.GET.get("term")
         if term:
             marks = marks.filter(term=term)
-        
         ctx["marks"] = marks
         ctx["total_marks"] = marks.count()
         ctx["avg_score"] = mark_average(marks)
@@ -641,12 +559,10 @@ class SchoolMarksView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, 
         ctx["streams"] = Stream.objects.filter(school=school)
         ctx["subjects"] = Subject.objects.filter(school=school)
         ctx["terms"] = [t[0] for t in TERM_CHOICES]
-        
         return ctx
 
 
 class SchoolMarkEditView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
-    """View for editing a single mark"""
     template_name = "core/school_admin/mark_edit.html"
     required_roles = MARK_MANAGE_ROLES
     
@@ -654,69 +570,52 @@ class SchoolMarkEditView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
         school = self.get_school()
         if not school:
             return HttpResponseForbidden("You are not associated with a school.")
-        
         mark = get_object_or_404(Mark, pk=mark_id, school=school)
-        
         return render(request, self.template_name, {"mark": mark})
     
     def post(self, request, mark_id):
         school = self.get_school()
         if not school:
             return HttpResponseForbidden("You are not associated with a school.")
-        
         mark = get_object_or_404(Mark, pk=mark_id, school=school)
-        
         value = request.POST.get("mark_value")
         if not value:
             messages.error(request, "Please enter a value.")
             return redirect("core:school_mark_edit", mark_id=mark.pk)
-        
         try:
             value = float(value)
         except (ValueError, TypeError):
             messages.error(request, "Please enter a valid number.")
             return redirect("core:school_mark_edit", mark_id=mark.pk)
-        
         limit = 20 if mark.exam == "Mid Term" else 80
         if value < 0 or value > limit:
             messages.error(request, f"Value must be between 0 and {limit}.")
             return redirect("core:school_mark_edit", mark_id=mark.pk)
-        
         if mark.exam == "Mid Term":
             mark.mid_term = value
         else:
             mark.end_term = value
-        
         mark.save()
         messages.success(request, "Mark updated successfully!")
-        
         return redirect("core:school_marks")
 
 
 class DeleteMarkView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
-    """View for deleting a mark"""
     required_roles = MARK_MANAGE_ROLES
     
     def post(self, request):
         school = self.get_school()
         if not school:
             return HttpResponseForbidden("You are not associated with a school.")
-        
         mark_id = request.POST.get("mark_id")
         if not mark_id:
             return redirect("core:school_marks")
-        
-        mark = Mark.objects.filter(
-            pk=mark_id,
-            school=school
-        ).first()
-        
+        mark = Mark.objects.filter(pk=mark_id, school=school).first()
         if mark:
             mark.delete()
             messages.success(request, "Mark deleted successfully!")
         else:
             messages.error(request, "Mark not found.")
-        
         return redirect("core:school_marks")
 
 
@@ -725,21 +624,17 @@ class DeleteMarkView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, V
 # ============================================================
 
 class StudentProfileView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """View for viewing a student's profile and marks"""
     template_name = "core/student_profile.html"
     required_roles = ['school_admin', 'headteacher', 'dos', 'teacher', 'class_teacher', 'student', 'parent']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         if not school:
             return ctx
-        
         student_id = self.kwargs.get('student_id')
         student = get_object_or_404(StudentProfile, pk=student_id, school=school)
         
-        # Check if user has permission to view this student
         user = self.request.user
         if user.role == 'student':
             try:
@@ -757,10 +652,7 @@ class StudentProfileView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
             except ParentProfile.DoesNotExist:
                 return HttpResponseForbidden("Parent profile not found.")
         
-        marks = Mark.objects.filter(
-            student=student
-        ).select_related("subject", "teacher")
-        
+        marks = Mark.objects.filter(student=student).select_related("subject", "teacher")
         marks_by_exam = {}
         for mark in marks:
             key = f"{mark.term} - {mark.exam}"
@@ -773,47 +665,32 @@ class StudentProfileView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
         ctx["marks_by_exam"] = marks_by_exam
         ctx["avg_score"] = mark_average(marks)
         ctx["total_points"] = sum([m.grade_points for m in marks])
-        
         return ctx
 
 
 class ClassMarksView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """View for viewing marks for an entire class"""
     template_name = "core/class_marks.html"
     required_roles = ['school_admin', 'headteacher', 'dos', 'teacher', 'class_teacher']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         if not school:
             return ctx
-        
         class_id = self.kwargs.get('class_id')
         class_level = get_object_or_404(ClassLevel, pk=class_id, school=school)
-        
-        students = StudentProfile.objects.filter(
-            school=school,
-            class_level=class_level
-        ).select_related("user", "stream")
-        
+        students = StudentProfile.objects.filter(school=school, class_level=class_level).select_related("user", "stream")
         student_ids = students.values_list('pk', flat=True)
-        marks = Mark.objects.filter(
-            student__in=student_ids
-        ).select_related("student", "subject", "teacher")
-        
+        marks = Mark.objects.filter(student__in=student_ids).select_related("student", "subject", "teacher")
         marks_by_student = {}
         for student in students:
             marks_by_student[student.pk] = []
-        
         for mark in marks:
             marks_by_student[mark.student_id].append(mark)
-        
         ctx["class_level"] = class_level
         ctx["students"] = students
         ctx["marks_by_student"] = marks_by_student
         ctx["terms"] = [t[0] for t in TERM_CHOICES]
-        
         return ctx
 
 
@@ -822,17 +699,14 @@ class ClassMarksView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, T
 # ============================================================
 
 class StudentReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """View student performance report"""
     template_name = "core/reports/student_report.html"
     required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher', 'student', 'parent']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         student_id = self.kwargs.get('student_id')
         school = self.get_school()
         
-        # If it's a student viewing their own report
         if not student_id and self.request.user.role == 'student':
             try:
                 student = StudentProfile.objects.get(user=self.request.user)
@@ -840,7 +714,6 @@ class StudentReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin
             except StudentProfile.DoesNotExist:
                 pass
         
-        # If it's a parent viewing their child's report
         if not student_id and self.request.user.role == 'parent':
             try:
                 parent = ParentProfile.objects.get(user=self.request.user)
@@ -855,18 +728,15 @@ class StudentReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin
             ctx['report'] = report.student_performance_report(student_id)
             ctx['student'] = get_object_or_404(StudentProfile, pk=student_id)
             ctx['terms'] = [t[0] for t in TERM_CHOICES]
-        
         return ctx
 
 
 class ClassReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """View class performance report"""
     template_name = "core/reports/class_report.html"
     required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         class_id = self.kwargs.get('class_id')
         term = self.request.GET.get('term')
@@ -885,44 +755,33 @@ class ClassReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, 
         ctx['exams'] = [e[0] for e in EXAM_CHOICES]
         ctx['selected_term'] = term
         ctx['selected_exam'] = exam
-        
         return ctx
 
 
 class TermReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """View term performance report"""
     template_name = "core/reports/term_report.html"
     required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         term = self.kwargs.get('term')
         exam = self.request.GET.get('exam')
         
-        report = ReportGenerator(
-            school=school,
-            term=term,
-            exam=exam
-        )
-        
+        report = ReportGenerator(school=school, term=term, exam=exam)
         ctx['report'] = report.term_report()
         ctx['term'] = term
         ctx['exam'] = exam
         ctx['exams'] = [e[0] for e in EXAM_CHOICES]
-        
         return ctx
 
 
 class SubjectReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """View subject performance report"""
     template_name = "core/reports/subject_report.html"
     required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         subject_id = self.kwargs.get('subject_id')
         term = self.request.GET.get('term')
@@ -932,23 +791,19 @@ class SubjectReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin
         ctx['subject'] = get_object_or_404(Subject, pk=subject_id, school=school) if subject_id else None
         ctx['terms'] = [t[0] for t in TERM_CHOICES]
         ctx['selected_term'] = term
-        
         return ctx
 
 
 class MarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """View printable marksheet"""
     template_name = "core/reports/marksheet.html"
     required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher', 'student', 'parent']
     
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
         school = self.get_school()
         student_id = self.kwargs.get('student_id')
         term = self.request.GET.get('term')
         
-        # If student viewing their own marksheet
         if not student_id and self.request.user.role == 'student':
             try:
                 student = StudentProfile.objects.get(user=self.request.user)
@@ -966,7 +821,6 @@ class MarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, Te
             ctx['student'] = get_object_or_404(StudentProfile, pk=student_id)
             ctx['term'] = term
             ctx['terms'] = [t[0] for t in TERM_CHOICES]
-        
         return ctx
 
 
@@ -975,19 +829,15 @@ class MarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, Te
 # ============================================================
 
 class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """Download report as PDF"""
     required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher']
     
     def get(self, request, report_type, item_id, *args, **kwargs):
         school = request.user.school if request.user.role != 'system_admin' else None
-        
-        # Generate HTML from template
         html_string = self._get_report_html(request, report_type, item_id, school)
         
         if not html_string:
             return HttpResponse("Report not found", status=404)
         
-        # Try to generate PDF
         try:
             from weasyprint import HTML, CSS
             from weasyprint.text.fonts import FontConfiguration
@@ -1002,13 +852,11 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
             return response
             
         except ImportError:
-            # If weasyprint not installed, return HTML version
             response = HttpResponse(html_string, content_type='text/html')
             response['Content-Disposition'] = f'attachment; filename="{report_type}_report_{item_id}.html"'
             return response
     
     def _get_report_html(self, request, report_type, item_id, school):
-        """Get HTML for the report"""
         context = {}
         report = ReportGenerator(school=school)
         
@@ -1020,5 +868,4 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
         
         elif report_type == 'class':
             context['report'] = report.class_performance_report()
-            context['class_level'] = get_object_or_404(ClassLevel, pk=item_id, school=school)
-            context
+            context['class_level'] = get_object_or_404(ClassLevel, pk=item_id, school=s
