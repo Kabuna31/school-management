@@ -83,124 +83,154 @@ ROLE_COLORS = {
 }
 
 
-# ── Scoping mixin ──────────────────────────────────────────────────────────
+# ── Scoped mixin ──────────────────────────────────────────────────────────
 
 class SchoolScopedMixin:
     """
-    Restrict queryset / FK choices / search to the user's school.
-    Automatically assigns the user's school when saving.
-    Superusers always see everything.
+    Restrict records to user's school and automatically
+    assign school during save.
+
+    Superusers can access everything.
     """
 
-    school_field = 'school'
+    school_field = "school"
 
     def _is_scoped(self, request):
         return (
-            not request.user.is_superuser
-            and getattr(request.user, 'role', None) in SCOPED_ROLES
+            request.user.is_authenticated
+            and not request.user.is_superuser
+            and getattr(request.user, "role", None) in SCOPED_ROLES
         )
 
     def _user_school(self, request):
-        return getattr(request.user, 'school', None)
+        return getattr(request.user, "school", None)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
+
         if self._is_scoped(request):
             school = self._user_school(request)
-            qs = qs.filter(**{self.school_field: school}) if school else qs.none()
+
+            if school:
+                qs = qs.filter(**{
+                    self.school_field: school
+                })
+            else:
+                qs = qs.none()
+
         return qs
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        school = self._user_school(request)
-        if self._is_scoped(request) and school:
-            mapping = {
-                School:          School.objects.filter(pk=school.pk),
-                User:            User.objects.filter(school=school),
-                EmployeeProfile: EmployeeProfile.objects.filter(school=school),
-                StudentProfile:  StudentProfile.objects.filter(school=school),
-                ClassLevel:      ClassLevel.objects.filter(school=school),
-                Stream:          Stream.objects.filter(school=school),
-                Subject:         Subject.objects.filter(school=school),
-            }
-            if db_field.related_model in mapping:
-                kwargs['queryset'] = mapping[db_field.related_model]
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    def formfield_for_manytomany(self, db_field, request, **kwargs):
-        school = self._user_school(request)
-        if self._is_scoped(request) and school and db_field.related_model == ParentProfile:
-            kwargs['queryset'] = ParentProfile.objects.filter(school=school)
-        return super().formfield_for_manytomany(db_field, request, **kwargs)
-
-    def get_search_results(self, request, queryset, search_term):
-        queryset, use_distinct = super().get_search_results(request, queryset, search_term)
-        if self._is_scoped(request):
-            school = self._user_school(request)
-            if school:
-                queryset = queryset.filter(**{self.school_field: school})
-        return queryset, use_distinct
-
     def save_model(self, request, obj, form, change):
-        """Auto-assign school from user's profile if available"""
-        if self._is_scoped(request) and hasattr(obj, 'school'):
-            if request.user.school:
-                obj.school = request.user.school
-            else:
-                # If user doesn't have a school, use the first available school
-                first_school = School.objects.first()
-                if first_school:
-                    obj.school = first_school
-                else:
-                    # No schools exist - show error
-                    messages.error(request, "No school exists. Please create a school first.")
+        if hasattr(obj, "school"):
+            # Scoped users → auto assign
+            if self._is_scoped(request):
+                school = self._user_school(request)
+
+                if not school:
+                    messages.error(
+                        request,
+                        "Your account is not linked to a school. "
+                        "Please contact the administrator."
+                    )
                     return
+
+                obj.school = school
+
+            # Superuser → require manual selection
+            elif not obj.school:
+                messages.error(
+                    request,
+                    "School is required. Please select a school."
+                )
+                return
+
         super().save_model(request, obj, form, change)
 
     def get_fields(self, request, obj=None):
-        """Remove school field from forms for scoped users (auto-assigned)"""
         fields = list(super().get_fields(request, obj))
-        if self._is_scoped(request) and 'school' in fields:
-            fields.remove('school')
+
+        if self._is_scoped(request) and "school" in fields:
+            fields.remove("school")
+
         return fields
 
     def get_readonly_fields(self, request, obj=None):
-        """Make school readonly if it appears (for superusers)"""
         readonly = list(super().get_readonly_fields(request, obj))
-        if self._is_scoped(request) and obj and 'school' not in readonly:
-            readonly.append('school')
+        
+        if self._is_scoped(request) and obj and "school" not in readonly:
+            readonly.append("school")
+        
         return readonly
 
     def get_list_filter(self, request):
-        """Remove school from list filters for scoped users (already filtered)"""
         filters = list(super().get_list_filter(request))
-        if self._is_scoped(request) and 'school' in filters:
-            filters.remove('school')
+        
+        if self._is_scoped(request) and "school" in filters:
+            filters.remove("school")
+        
         return filters
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        school = self._user_school(request)
+
+        if self._is_scoped(request) and school and db_field.name == "school":
+            kwargs["queryset"] = School.objects.filter(pk=school.pk)
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 # ── Scoped inline base ─────────────────────────────────────────────────────
 
 class SchoolScopedInline(admin.StackedInline):
+    """Inline version of SchoolScopedMixin"""
 
     def _is_scoped(self, request):
         return (
-            not request.user.is_superuser
-            and getattr(request.user, 'role', None) in SCOPED_ROLES
+            request.user.is_authenticated
+            and not request.user.is_superuser
+            and getattr(request.user, "role", None) in SCOPED_ROLES
         )
 
     def _user_school(self, request):
-        return getattr(request.user, 'school', None)
+        return getattr(request.user, "school", None)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
+
         if self._is_scoped(request):
             school = self._user_school(request)
             if school and hasattr(self.model, 'school'):
                 qs = qs.filter(school=school)
+
         return qs
+
+    def save_model(self, request, obj, form, change):
+        if hasattr(obj, "school"):
+            if self._is_scoped(request):
+                school = self._user_school(request)
+
+                if not school:
+                    messages.error(
+                        request,
+                        "Your account is not linked to a school. "
+                        "Please contact the administrator."
+                    )
+                    return
+
+                obj.school = school
+
+            elif not obj.school:
+                messages.error(
+                    request,
+                    "School is required. Please select a school."
+                )
+                return
+
+        super().save_model(request, obj, form, change)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         school = self._user_school(request)
+
         if self._is_scoped(request) and school:
             mapping = {
                 ClassLevel:      ClassLevel.objects.filter(school=school),
@@ -210,20 +240,8 @@ class SchoolScopedInline(admin.StackedInline):
             }
             if db_field.related_model in mapping:
                 kwargs['queryset'] = mapping[db_field.related_model]
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    def save_model(self, request, obj, form, change):
-        """Auto-assign school from user's profile for inline forms"""
-        if self._is_scoped(request) and hasattr(obj, 'school'):
-            if request.user.school:
-                obj.school = request.user.school
-            else:
-                first_school = School.objects.first()
-                if first_school:
-                    obj.school = first_school
-                else:
-                    return
-        super().save_model(request, obj, form, change)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 # ── Inlines ────────────────────────────────────────────────────────────────
@@ -303,6 +321,8 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
     def save_model(self, request, obj, form, change):
         if self._is_scoped(request):
             obj.school = request.user.school
+        
+        # Handle role-based permissions
         if obj.role == 'system_admin':
             if not change:
                 obj.role = 'school_admin'
@@ -311,6 +331,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
         else:
             obj.is_superuser = False
             obj.is_staff = True
+            
         super().save_model(request, obj, form, change)
 
     def get_form(self, request, obj=None, **kwargs):
@@ -549,35 +570,3 @@ class TimetableAdmin(SchoolScopedMixin, ImportExportModelAdmin):
             'fields': ('class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
         }),
     )
-
-
-# ── Fix Admin Permissions ─────────────────────────────────────────────────
-
-from django.contrib.auth.models import Permission
-from django.http import HttpResponse
-
-def fix_admin_permissions_view(request):
-    """One-time view to fix admin permissions"""
-    UserModel = User
-    try:
-        admin_user = UserModel.objects.get(username='admin')
-    except UserModel.DoesNotExist:
-        return HttpResponse("❌ Admin user not found!")
-    
-    admin_user.is_superuser = True
-    admin_user.is_staff = True
-    admin_user.is_active = True
-    admin_user.user_permissions.set(Permission.objects.all())
-    admin_user.save()
-    
-    html = f"""
-    <h1>✅ Admin Permissions Fixed!</h1>
-    <ul>
-        <li>Username: {admin_user.username}</li>
-        <li>Superuser: {admin_user.is_superuser}</li>
-        <li>Staff: {admin_user.is_staff}</li>
-        <li>Permissions: {admin_user.user_permissions.count()}</li>
-    </ul>
-    <p><a href="/admin/">Go to Admin Panel</a></p>
-    """
-    return HttpResponse(html)
