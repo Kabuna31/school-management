@@ -234,7 +234,7 @@ class StudentProfileInline(SchoolScopedInline):
 
 @admin.register(School)
 class SchoolAdmin(ImportExportModelAdmin):
-    resource_classes = [SchoolResource]
+    resource_class = SchoolResource
     list_display     = ('name', 'code', 'phone', 'email')
     search_fields    = ('name', 'code')
 
@@ -244,7 +244,7 @@ class SchoolAdmin(ImportExportModelAdmin):
 @admin.register(User)
 class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
 
-    resource_classes = [UserResource]
+    resource_class = UserResource
     list_display     = ('username', 'full_name', 'role_badge', 'school', 'is_active', 'date_joined')
     list_filter      = ('role', 'school', 'is_active')
     search_fields    = ('username', 'email', 'first_name', 'last_name')
@@ -283,7 +283,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
         else:
             obj.is_superuser = False
             obj.is_staff = True
-        admin.ModelAdmin.save_model(self, request, obj, form, change)
+        super().save_model(request, obj, form, change)
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
@@ -316,7 +316,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
 
 @admin.register(Stream)
 class StreamAdmin(SchoolScopedMixin, ImportExportModelAdmin):
-    resource_classes = [StreamResource]
+    resource_class = StreamResource
     list_display     = ('name', 'school', 'student_count')
     list_filter      = ('school',)
     search_fields    = ('name',)
@@ -327,6 +327,7 @@ class StreamAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 
 
 # ── ClassLevel ─────────────────────────────────────────────────────────────
+
 @admin.register(ClassLevel)
 class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     resource_class = ClassLevelResource
@@ -334,14 +335,27 @@ class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     list_filter = ('school',)
     search_fields = ('name',)
     autocomplete_fields = ('class_teacher',)
-    # Make sure school is in the fields
-    fields = ('name', 'school', 'class_teacher')  # Add this line if missing
+    
+    # IMPORTANT: Include school in the form fields
+    fields = ('name', 'school', 'class_teacher')
+    
+    # Alternative: Use fieldsets if you prefer
+    # fieldsets = (
+    #     (None, {
+    #         'fields': ('name', 'school', 'class_teacher')
+    #     }),
+    # )
+    
+    @admin.display(description='Students')
+    def student_count(self, obj):
+        return StudentProfile.objects.filter(class_level=obj).count()
+
 
 # ── EmployeeProfile ────────────────────────────────────────────────────────
 
 @admin.register(EmployeeProfile)
 class EmployeeProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
-    resource_classes = [EmployeeProfileResource]
+    resource_class = EmployeeProfileResource
     list_display     = ('full_name', 'role_badge', 'school', 'staff_id', 'hire_date')
     list_filter      = ('school', 'user__role')
     search_fields    = ('user__username', 'user__first_name', 'user__last_name', 'staff_id')
@@ -365,7 +379,7 @@ class EmployeeProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 
 @admin.register(ParentProfile)
 class ParentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
-    resource_classes = [ParentProfileResource]
+    resource_class = ParentProfileResource
     list_display     = ('full_name', 'school', 'phone_number', 'children_count')
     list_filter      = ('school',)
     search_fields    = ('user__username', 'user__first_name', 'user__last_name', 'phone_number')
@@ -383,7 +397,7 @@ class ParentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 
 @admin.register(StudentProfile)
 class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
-    resource_classes  = [StudentProfileResource]
+    resource_class  = StudentProfileResource
     list_display      = (
         'full_name', 'admission_number', 'school',
         'class_level', 'stream', 'gender_badge', 'marks_count',
@@ -440,7 +454,7 @@ class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 
 @admin.register(Subject)
 class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
-    resource_classes = [SubjectResource]
+    resource_class = SubjectResource
     list_display     = ('name', 'code', 'school', 'avg_total')
     list_filter      = ('school',)
     search_fields    = ('name', 'code')
@@ -463,7 +477,7 @@ class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 
 @admin.register(Mark)
 class MarkAdmin(SchoolScopedMixin, ImportExportModelAdmin):
-    resource_classes = [MarkResource]
+    resource_class = MarkResource
     list_display     = (
         'student_name', 'subject', 'term', 'exam',
         'mid_term', 'end_term', 'total_display', 'grade_badge',
@@ -503,7 +517,7 @@ class MarkAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 
 @admin.register(Timetable)
 class TimetableAdmin(SchoolScopedMixin, ImportExportModelAdmin):
-    resource_classes = [TimetableResource]
+    resource_class = TimetableResource
     list_display     = ('school', 'class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
     list_filter      = ('school', 'day', 'class_level', 'stream', 'subject')
     search_fields    = (
