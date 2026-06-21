@@ -63,6 +63,10 @@ def fix_school_view(request):
     
     count = 0
     for user in User.objects.filter(school__isnull=True):
+        # Skip system_admin users
+        if user.role == 'system_admin' or user.is_superuser:
+            html += f"<p>⚠️ Skipped {user.username} (system_admin - should have no school)</p>"
+            continue
         user.school = school
         user.save()
         count += 1
@@ -86,6 +90,9 @@ def fix_admin_permissions_view(request):
     admin_user.is_superuser = True
     admin_user.is_staff = True
     admin_user.is_active = True
+    admin_user.role = 'system_admin'
+    admin_user.school = None
+    admin_user.school_id = None
     admin_user.user_permissions.set(Permission.objects.all())
     admin_user.save()
     
@@ -93,8 +100,10 @@ def fix_admin_permissions_view(request):
     <h1>✅ Admin Permissions Fixed!</h1>
     <ul>
         <li>Username: {admin_user.username}</li>
+        <li>Role: {admin_user.role}</li>
         <li>Superuser: {admin_user.is_superuser}</li>
         <li>Staff: {admin_user.is_staff}</li>
+        <li>School: None (system_admin sees all schools)</li>
         <li>Permissions: {admin_user.user_permissions.count()}</li>
     </ul>
     <p><a href="/admin/">Go to Admin Panel</a></p>
@@ -128,22 +137,39 @@ class CreateAdminView(View):
         User = get_user_model()
         
         if User.objects.filter(username='admin').exists():
+            admin = User.objects.get(username='admin')
+            # Ensure admin has correct settings
+            admin.role = 'system_admin'
+            admin.school = None
+            admin.school_id = None
+            admin.is_superuser = True
+            admin.is_staff = True
+            admin.save()
             return HttpResponse("""
                 <h1>✅ Admin already exists!</h1>
                 <p>Username: admin</p>
+                <p>Role: system_admin</p>
+                <p>School: None (sees all schools)</p>
                 <p>Password: admin123456</p>
                 <p><a href="/login/">Go to Login</a></p>
             """)
         
-        User.objects.create_superuser(
+        # Create admin with NO school
+        admin = User.objects.create_superuser(
             username='admin',
             email='admin@school.com',
             password='admin123456'
         )
+        admin.role = 'system_admin'
+        admin.school = None
+        admin.school_id = None
+        admin.save()
         
         return HttpResponse("""
             <h1>✅ Admin created successfully!</h1>
             <p>Username: <strong>admin</strong></p>
+            <p>Role: <strong>system_admin</strong></p>
+            <p>School: <strong>None</strong> (sees all schools)</p>
             <p>Password: <strong>admin123456</strong></p>
             <p><a href="/login/">Go to Login</a></p>
         """)
@@ -186,6 +212,7 @@ class RoleRequiredMixin:
         if not self.required_roles:
             return super().dispatch(request, *args, **kwargs)
         
+        # ✅ system_admin and superusers can access everything
         if request.user.is_superuser or request.user.role == 'system_admin':
             return super().dispatch(request, *args, **kwargs)
         
@@ -198,18 +225,24 @@ class RoleRequiredMixin:
 
 
 class SchoolScopedMixin:
+    """Mixin to ensure user only accesses their school's data"""
+    
     def get_school(self):
+        """Get the school for the current user"""
         if hasattr(self.request.user, 'school'):
             return self.request.user.school
         return None
     
     def dispatch(self, request, *args, **kwargs):
+        # ✅ system_admin and superusers can access everything
         if request.user.role == 'system_admin' or request.user.is_superuser:
             return super().dispatch(request, *args, **kwargs)
         
+        # ✅ Check if user has a school
         school = self.get_school()
         if not school:
-            return HttpResponseForbidden("You are not associated with a school.")
+            return HttpResponseForbidden("You are not associated with a school. Please contact an administrator.")
+        
         return super().dispatch(request, *args, **kwargs)
 
 
@@ -742,7 +775,6 @@ class ClassReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, 
         term = self.request.GET.get('term')
         exam = self.request.GET.get('exam')
         
-        # ✅ FIXED: Use 'class_level' (not 'class_level_id')
         report = ReportGenerator(
             school=school,
             class_level=class_id if class_id else None,
