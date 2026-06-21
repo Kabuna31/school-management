@@ -60,22 +60,24 @@ DASHBOARD_ROLES = [
 
 class User(AbstractUser):
     school = models.ForeignKey(
-        School, on_delete=models.SET_NULL, null=True, blank=True
+        School, 
+        on_delete=models.PROTECT,  # Prevents deleting a school that has users
+        null=False,  # REQUIRED - cannot be NULL in database
+        blank=False,  # REQUIRED - must be provided in forms
+        default=1   # Set a default school ID (you'll need to create a school first)
     )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='teacher')
-
+    
     def __str__(self):
         return f"{self.get_full_name() or self.username} ({self.get_role_display()})"
-
+    
     @property
     def is_system_admin(self):
         return self.role == 'system_admin' or self.is_superuser
-
+    
     @property
     def is_scoped_role(self):
-        """True for roles that should only see their own school's data."""
         return self.role in SCOPED_ROLES
-
 
 # ---------------------------------------------------------------------------
 # 3. Profiles
