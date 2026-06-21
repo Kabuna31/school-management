@@ -185,22 +185,29 @@ class SchoolScopedMixin:
                               if role != 'system_admin']
                 ).exclude(is_superuser=True)
             
-            # Map models to their school filter
+            # Handle EmployeeProfile - show only from same school
+            elif db_field.related_model == EmployeeProfile:
+                kwargs['queryset'] = EmployeeProfile.objects.filter(school=school)
+            
+            # Handle ParentProfile - show only from same school
+            elif db_field.related_model == ParentProfile:
+                kwargs['queryset'] = ParentProfile.objects.filter(school=school)
+            
+            # Map other models to their school filter
             mapping = {
                 School:          School.objects.filter(pk=school.pk),
-                EmployeeProfile: EmployeeProfile.objects.filter(school=school),
                 StudentProfile:  StudentProfile.objects.filter(school=school),
                 ClassLevel:      ClassLevel.objects.filter(school=school),
                 Stream:          Stream.objects.filter(school=school),
                 Subject:         Subject.objects.filter(school=school),
                 Mark:            Mark.objects.filter(school=school),
                 Timetable:       Timetable.objects.filter(school=school),
-                ParentProfile:   ParentProfile.objects.filter(school=school),
             }
             
             if db_field.related_model in mapping:
                 kwargs['queryset'] = mapping[db_field.related_model]
             elif hasattr(db_field.related_model, 'school'):
+                # For any model with a school field, filter by school
                 kwargs['queryset'] = db_field.related_model.objects.filter(school=school)
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
@@ -227,7 +234,6 @@ class SchoolScopedMixin:
                 queryset = queryset.filter(**{self.school_field: school})
         
         return queryset, use_distinct
-
 
 # ── Scoped inline base ─────────────────────────────────────────────────────
 
@@ -267,18 +273,25 @@ class SchoolScopedInline(admin.StackedInline):
                               if role != 'system_admin']
                 ).exclude(is_superuser=True)
             
+            # Handle EmployeeProfile
+            elif db_field.related_model == EmployeeProfile:
+                kwargs['queryset'] = EmployeeProfile.objects.filter(school=school)
+            
+            # Handle ParentProfile
+            elif db_field.related_model == ParentProfile:
+                kwargs['queryset'] = ParentProfile.objects.filter(school=school)
+            
             mapping = {
                 ClassLevel:      ClassLevel.objects.filter(school=school),
                 Stream:          Stream.objects.filter(school=school),
                 Subject:         Subject.objects.filter(school=school),
-                EmployeeProfile: EmployeeProfile.objects.filter(school=school),
                 StudentProfile:  StudentProfile.objects.filter(school=school),
-                ParentProfile:   ParentProfile.objects.filter(school=school),
             }
             if db_field.related_model in mapping:
                 kwargs['queryset'] = mapping[db_field.related_model]
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 
 # ── Inlines ────────────────────────────────────────────────────────────────
