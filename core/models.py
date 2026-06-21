@@ -21,45 +21,26 @@ class School(models.Model):
 # ---------------------------------------------------------------------------
 # 2. User
 # ---------------------------------------------------------------------------
-ROLE_CHOICES = (
-    ('system_admin',   'System Admin'),
-    ('school_admin',   'School System Administrator'),
-    ('headteacher',    'Headteacher'),
-    ('dos',            'Director of Studies'),
-    ('bursar',         'School Bursar'),
-    ('nurse',          'School Nurse'),
-    ('librarian',      'School Librarian'),
-    ('lab_technician', 'Lab Technician'),
-    ('class_teacher',  'Class Teacher'),
-    ('teacher',        'Teacher'),
-    ('parent',         'Parent'),
-    ('student',        'Student'),
-)
 
-# Roles that are scoped to their own school (used by admin + views)
-SCOPED_ROLES = [
-    'school_admin', 'headteacher', 'dos', 'bursar',
-    'nurse', 'librarian', 'lab_technician', 'class_teacher',
-]
-
-# Roles that can enter / edit marks
-MARK_ENTRY_ROLES = [
-    'system_admin', 'school_admin', 'headteacher',
-    'dos', 'teacher', 'class_teacher',
-]
-
-# Roles that can manage (view/edit/delete) all school marks
-MARK_MANAGE_ROLES = ['school_admin', 'headteacher']
-
-# Roles that have a dedicated dashboard (others fall back to /admin/)
-DASHBOARD_ROLES = [
-    'system_admin', 'school_admin', 'headteacher', 'dos',
-    'bursar', 'teacher', 'class_teacher', 'student', 'parent',
-    'nurse', 'librarian', 'lab_technician',
-]
+from django.core.exceptions import ValidationError
+from django.db import models
+from django.contrib.auth.models import AbstractUser
 
 
 class User(AbstractUser):
+
+    ROLE_CHOICES = [
+        ("system_admin", "System Administrator"),
+        ("school_admin", "School Administrator"),
+        ("headteacher", "Headteacher"),
+        ("teacher", "Teacher"),
+        ("student", "Student"),
+    ]
+
+    role = models.CharField(
+        max_length=30,
+        choices=ROLE_CHOICES
+    )
 
     school = models.ForeignKey(
         School,
@@ -68,19 +49,19 @@ class User(AbstractUser):
         blank=True
     )
 
-    role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        default='teacher'
-    )
-
     def clean(self):
         super().clean()
 
-        if self.role != "system_admin" and not self.school:
+        # Only system admin can have no school
+        if self.role != "system_admin" and self.school is None:
             raise ValidationError({
-                "school": "School is required."
+                "school": "School is required for this user role."
             })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
 # ---------------------------------------------------------------------------
 # 3. Profiles
 # ---------------------------------------------------------------------------
