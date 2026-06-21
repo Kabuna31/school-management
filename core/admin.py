@@ -172,15 +172,22 @@ class SchoolScopedMixin:
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """
         RESTRICT DROPDOWN CHOICES TO USER'S SCHOOL ONLY!
-        This is the most important method for dropdown restrictions.
+        This includes hiding system_admin users from other schools.
         """
         school = self._user_school(request)
 
         if self._is_scoped(request) and school:
+            # Handle User dropdown specially - hide system_admin and other schools
+            if db_field.related_model == User:
+                kwargs['queryset'] = User.objects.filter(
+                    school=school,
+                    role__in=[role for role in dict(User._meta.get_field('role').choices).keys() 
+                              if role != 'system_admin']
+                ).exclude(is_superuser=True)
+            
             # Map models to their school filter
             mapping = {
                 School:          School.objects.filter(pk=school.pk),
-                User:            User.objects.filter(school=school),
                 EmployeeProfile: EmployeeProfile.objects.filter(school=school),
                 StudentProfile:  StudentProfile.objects.filter(school=school),
                 ClassLevel:      ClassLevel.objects.filter(school=school),
@@ -191,11 +198,9 @@ class SchoolScopedMixin:
                 ParentProfile:   ParentProfile.objects.filter(school=school),
             }
             
-            # Check if the field's model is in our mapping
             if db_field.related_model in mapping:
                 kwargs['queryset'] = mapping[db_field.related_model]
             elif hasattr(db_field.related_model, 'school'):
-                # For any model with a school field, filter by school
                 kwargs['queryset'] = db_field.related_model.objects.filter(school=school)
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
@@ -254,6 +259,14 @@ class SchoolScopedInline(admin.StackedInline):
         school = self._user_school(request)
 
         if self._is_scoped(request) and school:
+            # Handle User dropdown specially - hide system_admin
+            if db_field.related_model == User:
+                kwargs['queryset'] = User.objects.filter(
+                    school=school,
+                    role__in=[role for role in dict(User._meta.get_field('role').choices).keys() 
+                              if role != 'system_admin']
+                ).exclude(is_superuser=True)
+            
             mapping = {
                 ClassLevel:      ClassLevel.objects.filter(school=school),
                 Stream:          Stream.objects.filter(school=school),
@@ -346,6 +359,11 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
         if self._is_scoped(request):
             obj.school = request.user.school
         
+        # Prevent scoped users from creating system_admin
+        if self._is_scoped(request) and obj.role == 'system_admin':
+            messages.error(request, "You cannot create a System Admin user.")
+            return
+        
         if obj.role == 'system_admin':
             obj.is_superuser = True
             obj.is_staff = True
@@ -357,10 +375,13 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        if not request.user.is_superuser:
+        
+        # Hide system_admin role from scoped users
+        if self._is_scoped(request):
             role = form.base_fields.get('role')
             if role:
                 role.choices = [x for x in role.choices if x[0] != 'system_admin']
+        
         return form
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
