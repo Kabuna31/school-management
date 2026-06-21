@@ -129,13 +129,16 @@ class SchoolScopedMixin:
                 else:
                     messages.error(request, "You are not associated with a school.")
                     return
-            
-            # For superusers or if school is still not set
-            elif not obj.school_id and not obj.school:
-                from .models import School
-                school = School.objects.first()
-                if school:
-                    obj.school = school
+            else:
+                # For superusers, if no school is selected, use first school
+                if not obj.school_id and not obj.school:
+                    from .models import School
+                    school = School.objects.first()
+                    if school:
+                        obj.school = school
+                    else:
+                        messages.error(request, "No school exists. Please create one first.")
+                        return
 
         super().save_model(request, obj, form, change)
 
@@ -199,6 +202,7 @@ class SchoolScopedMixin:
         
         return queryset, use_distinct
 
+
 # ── Scoped inline base ─────────────────────────────────────────────────────
 
 class SchoolScopedInline(admin.StackedInline):
@@ -250,6 +254,8 @@ class SchoolScopedInline(admin.StackedInline):
                 kwargs['queryset'] = mapping[db_field.related_model]
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
 # ── Inlines ────────────────────────────────────────────────────────────────
 
 class EmployeeProfileInline(SchoolScopedInline):
@@ -328,10 +334,9 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
         if self._is_scoped(request):
             obj.school = request.user.school
         
+        # Fix role handling
         if obj.role == 'system_admin':
-            if not change:
-                obj.role = 'school_admin'
-            obj.is_superuser = change
+            obj.is_superuser = True
             obj.is_staff = True
         else:
             obj.is_superuser = False
