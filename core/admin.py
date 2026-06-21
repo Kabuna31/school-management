@@ -5,6 +5,7 @@ from import_export.admin import ImportExportModelAdmin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.db.models import Avg, ExpressionWrapper, F, FloatField
+from django.contrib import messages
 from .models import (
     School, User, EmployeeProfile, ParentProfile,
     Stream, ClassLevel, StudentProfile, Subject, Mark, Timetable,
@@ -140,9 +141,19 @@ class SchoolScopedMixin:
         return queryset, use_distinct
 
     def save_model(self, request, obj, form, change):
-        """Auto-assign school from user's profile"""
+        """Auto-assign school from user's profile if available"""
         if self._is_scoped(request) and hasattr(obj, 'school'):
-            obj.school = request.user.school
+            if request.user.school:
+                obj.school = request.user.school
+            else:
+                # If user doesn't have a school, use the first available school
+                first_school = School.objects.first()
+                if first_school:
+                    obj.school = first_school
+                else:
+                    # No schools exist - show error
+                    messages.error(request, "No school exists. Please create a school first.")
+                    return
         super().save_model(request, obj, form, change)
 
     def get_fields(self, request, obj=None):
@@ -204,7 +215,14 @@ class SchoolScopedInline(admin.StackedInline):
     def save_model(self, request, obj, form, change):
         """Auto-assign school from user's profile for inline forms"""
         if self._is_scoped(request) and hasattr(obj, 'school'):
-            obj.school = request.user.school
+            if request.user.school:
+                obj.school = request.user.school
+            else:
+                first_school = School.objects.first()
+                if first_school:
+                    obj.school = first_school
+                else:
+                    return
         super().save_model(request, obj, form, change)
 
 
@@ -330,7 +348,6 @@ class StreamAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     list_display = ('name', 'school', 'student_count')
     list_filter = ('school',)
     search_fields = ('name',)
-    # School is auto-assigned - no need to show in form
     
     @admin.display(description='Students')
     def student_count(self, obj):
@@ -384,7 +401,6 @@ class EmployeeProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     list_filter      = ('school', 'user__role')
     search_fields    = ('user__username', 'user__first_name', 'user__last_name', 'staff_id')
     ordering         = ('school', 'staff_id')
-    # School is auto-assigned
 
     @admin.display(description='Name')
     def full_name(self, obj):
@@ -445,7 +461,6 @@ class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
             'fields': ('parent',),
         }),
     )
-    # School is auto-assigned - removed from fieldsets
 
     @admin.display(description='Name')
     def full_name(self, obj):
@@ -534,4 +549,35 @@ class TimetableAdmin(SchoolScopedMixin, ImportExportModelAdmin):
             'fields': ('class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
         }),
     )
-    # School is auto-assigned - removed from fieldsets
+
+
+# ── Fix Admin Permissions ─────────────────────────────────────────────────
+
+from django.contrib.auth.models import Permission
+from django.http import HttpResponse
+
+def fix_admin_permissions_view(request):
+    """One-time view to fix admin permissions"""
+    UserModel = User
+    try:
+        admin_user = UserModel.objects.get(username='admin')
+    except UserModel.DoesNotExist:
+        return HttpResponse("❌ Admin user not found!")
+    
+    admin_user.is_superuser = True
+    admin_user.is_staff = True
+    admin_user.is_active = True
+    admin_user.user_permissions.set(Permission.objects.all())
+    admin_user.save()
+    
+    html = f"""
+    <h1>✅ Admin Permissions Fixed!</h1>
+    <ul>
+        <li>Username: {admin_user.username}</li>
+        <li>Superuser: {admin_user.is_superuser}</li>
+        <li>Staff: {admin_user.is_staff}</li>
+        <li>Permissions: {admin_user.user_permissions.count()}</li>
+    </ul>
+    <p><a href="/admin/">Go to Admin Panel</a></p>
+    """
+    return HttpResponse(html)
