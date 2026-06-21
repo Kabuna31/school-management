@@ -564,4 +564,4 @@ class TimetableAdmin(AutoSchoolAdmin, SchoolScopedMixin):
         (None, {
             'fields': ('class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
         }),
-    )ss
+    )
