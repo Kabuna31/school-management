@@ -373,6 +373,45 @@ class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
         return StudentProfile.objects.filter(class_level=obj).count()
 
 
+# ── Subject ────────────────────────────────────────────────────────────────
+
+@admin.register(Subject)
+class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+    resource_class = SubjectResource
+    list_display = ('name', 'code', 'school', 'avg_total')
+    list_filter = ('school',)
+    search_fields = ('name', 'code')
+    ordering = ('school', 'name')
+    
+    # Force school field in form
+    fields = ('name', 'code', 'school')
+    
+    def get_fields(self, request, obj=None):
+        """Ensure school field is always present"""
+        fields = list(super().get_fields(request, obj))
+        if 'school' not in fields:
+            fields.append('school')
+        return fields
+    
+    def save_model(self, request, obj, form, change):
+        """Set school from user if not provided"""
+        if not obj.school_id and request.user.school:
+            obj.school = request.user.school
+        super().save_model(request, obj, form, change)
+    
+    @admin.display(description='Avg Total')
+    def avg_total(self, obj):
+        avg = Mark.objects.filter(subject=obj).annotate(
+            total=ExpressionWrapper(F('mid_term') + F('end_term'), output_field=FloatField())
+        ).aggregate(a=Avg('total'))['a']
+        if avg is None:
+            return '—'
+        color = '#166534' if avg >= 50 else '#991b1b'
+        return format_html(
+            '<strong style="color:{}">{}</strong>', color, f"{avg:.1f}",
+        )
+
+
 # ── EmployeeProfile ────────────────────────────────────────────────────────
 
 @admin.register(EmployeeProfile)
@@ -419,17 +458,17 @@ class ParentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 
 @admin.register(StudentProfile)
 class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
-    resource_class  = StudentProfileResource
-    list_display      = (
+    resource_class = StudentProfileResource
+    list_display = (
         'full_name', 'admission_number', 'school',
         'class_level', 'stream', 'gender_badge', 'marks_count',
     )
-    list_filter       = ('school', 'class_level', 'stream', 'gender')
-    search_fields     = ('user__username', 'user__first_name', 'user__last_name', 'admission_number')
+    list_filter = ('school', 'class_level', 'stream', 'gender')
+    search_fields = ('user__username', 'user__first_name', 'user__last_name', 'admission_number')
     filter_horizontal = ('parent',)
-    ordering          = ('school', 'class_level', 'stream', 'user__first_name')
-    list_per_page     = 30
-    readonly_fields   = ('passport_preview',)
+    ordering = ('school', 'class_level', 'stream', 'user__first_name')
+    list_per_page = 30
+    readonly_fields = ('passport_preview',)
 
     fieldsets = (
         ('Personal', {
@@ -442,6 +481,12 @@ class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
             'fields': ('parent',),
         }),
     )
+    
+    def save_model(self, request, obj, form, change):
+        """Set school from user if not provided"""
+        if not obj.school_id and request.user.school:
+            obj.school = request.user.school
+        super().save_model(request, obj, form, change)
 
     @admin.display(description='Name')
     def full_name(self, obj):
@@ -459,7 +504,7 @@ class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     @admin.display(description='Marks')
     def marks_count(self, obj):
         count = Mark.objects.filter(student=obj).count()
-        url   = reverse('admin:core_mark_changelist') + f'?student__user__username={obj.user.username}'
+        url = reverse('admin:core_mark_changelist') + f'?student__user__username={obj.user.username}'
         return format_html('<a href="{}">{} entries</a>', url, count)
 
     @admin.display(description='Current Photo')
@@ -470,29 +515,6 @@ class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
                 obj.passport_photo.url,
             )
         return '—'
-
-
-# ── Subject ────────────────────────────────────────────────────────────────
-
-@admin.register(Subject)
-class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
-    resource_class = SubjectResource
-    list_display     = ('name', 'code', 'school', 'avg_total')
-    list_filter      = ('school',)
-    search_fields    = ('name', 'code')
-    ordering         = ('school', 'name')
-
-    @admin.display(description='Avg Total')
-    def avg_total(self, obj):
-        avg = Mark.objects.filter(subject=obj).annotate(
-            total=ExpressionWrapper(F('mid_term') + F('end_term'), output_field=FloatField())
-        ).aggregate(a=Avg('total'))['a']
-        if avg is None:
-            return '—'
-        color = '#166534' if avg >= 50 else '#991b1b'
-        return format_html(
-            '<strong style="color:{}">{}</strong>', color, f"{avg:.1f}",
-        )
 
 
 # ── Mark ───────────────────────────────────────────────────────────────────
@@ -547,3 +569,19 @@ class TimetableAdmin(SchoolScopedMixin, ImportExportModelAdmin):
         'teacher__user__last_name', 'room',
     )
     ordering = ('school', 'class_level', 'day', 'start_time')
+    
+    # Force school field in form
+    fields = ('school', 'class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
+    
+    def get_fields(self, request, obj=None):
+        """Ensure school field is always present"""
+        fields = list(super().get_fields(request, obj))
+        if 'school' not in fields:
+            fields.append('school')
+        return fields
+    
+    def save_model(self, request, obj, form, change):
+        """Set school from user if not provided"""
+        if not obj.school_id and request.user.school:
+            obj.school = request.user.school
+        super().save_model(request, obj, form, change)
