@@ -123,27 +123,36 @@ class SchoolScopedMixin:
             and getattr(request.user, "role", None) in SCOPED_ROLES
         )
 
- def get_fields(self, request, obj=None):
-    fields = list(super().get_fields(request, obj))
+    def _user_school(self, request):
+        return getattr(request.user, "school", None)
 
-    if self._is_scoped(request) and "school" in fields:
-        # For UserAdmin, keep school field (we make it read-only in the form)
-        if hasattr(self, 'model') and self.model == User:
-            pass
-        else:
-            fields.remove("school")
+    def get_queryset(self, request):
+        """Restrict list views to user's school"""
+        qs = super().get_queryset(request)
 
-    return fields
+        if self._is_scoped(request):
+            school = self._user_school(request)
 
+            if school:
+                qs = qs.filter(**{
+                    self.school_field: school
+                })
+            else:
+                qs = qs.none()
 
+        return qs
 
-
+    # ✅ ONE get_fields method (not duplicate)
     def get_fields(self, request, obj=None):
-        """Remove school field from forms for scoped users"""
+        """Remove school field from forms for scoped users, except for UserAdmin"""
         fields = list(super().get_fields(request, obj))
 
         if self._is_scoped(request) and "school" in fields:
-            fields.remove("school")
+            # For UserAdmin, keep school field (we make it read-only in the form)
+            if hasattr(self, 'model') and self.model == User:
+                pass  # Keep the school field for UserAdmin
+            else:
+                fields.remove("school")  # Remove for all other models
 
         return fields
 
@@ -231,6 +240,7 @@ class SchoolScopedMixin:
         
         return queryset, use_distinct
 
+
 # ── Scoped inline base ─────────────────────────────────────────────────────
 
 class SchoolScopedInline(admin.StackedInline):
@@ -289,7 +299,6 @@ class SchoolScopedInline(admin.StackedInline):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
-
 # ── Inlines ────────────────────────────────────────────────────────────────
 
 class EmployeeProfileInline(SchoolScopedInline):
@@ -330,8 +339,6 @@ class SchoolAdmin(ImportExportModelAdmin):
     list_display     = ('name', 'code', 'phone', 'email')
     search_fields    = ('name', 'code')
 
-
-# ── User ───────────────────────────────────────────────────────────────────
 
 # ── User ───────────────────────────────────────────────────────────────────
 
@@ -393,7 +400,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
             if role:
                 role.choices = [x for x in role.choices if x[0] != 'system_admin']
             
-            # ⭐ Restrict school field choices to user's school only
+            # Restrict school field choices to user's school only
             school_field = form.base_fields.get('school')
             if school_field:
                 school_field.queryset = School.objects.filter(pk=request.user.school.pk)
@@ -404,7 +411,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
         return form
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        # ⭐ Restrict school field in the form
+        # Restrict school field in the form
         if self._is_scoped(request) and db_field.name == 'school':
             kwargs['queryset'] = School.objects.filter(pk=request.user.school.pk)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
@@ -421,6 +428,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
             'border-radius:30px;font-size:11px;font-weight:600;">{}</span>',
             color, obj.get_role_display(),
         )
+
 
 # ── Stream ─────────────────────────────────────────────────────────────────
 
