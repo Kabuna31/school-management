@@ -88,11 +88,13 @@ class SchoolScopedMixin:
     assign school during save.
 
     Superusers can access everything.
+    School admins only see their own school's data.
     """
 
     school_field = "school"
 
     def _is_scoped(self, request):
+        """Check if user should be scoped to their school"""
         return (
             request.user.is_authenticated
             and not request.user.is_superuser
@@ -100,25 +102,29 @@ class SchoolScopedMixin:
         )
 
     def _user_school(self, request):
+        """Get user's school"""
         return getattr(request.user, "school", None)
 
     def get_queryset(self, request):
+        """Restrict queryset to user's school for scoped users"""
         qs = super().get_queryset(request)
 
         if self._is_scoped(request):
             school = self._user_school(request)
 
             if school:
+                # Filter by school
                 qs = qs.filter(**{
                     self.school_field: school
                 })
             else:
+                # User has no school - return empty queryset
                 qs = qs.none()
 
         return qs
 
     def save_model(self, request, obj, form, change):
-        """Auto-assign school from user's profile"""
+        """Auto-assign school from user's profile for scoped users"""
         if hasattr(obj, "school"):
             # For scoped users, auto-assign from user
             if self._is_scoped(request):
@@ -126,6 +132,7 @@ class SchoolScopedMixin:
                 if school:
                     obj.school = school
                 else:
+                    from django.contrib import messages
                     messages.error(request, "You are not associated with a school.")
                     return
             
@@ -139,6 +146,7 @@ class SchoolScopedMixin:
         super().save_model(request, obj, form, change)
 
     def get_fields(self, request, obj=None):
+        """Remove school field from forms for scoped users (auto-assigned)"""
         fields = list(super().get_fields(request, obj))
 
         if self._is_scoped(request) and "school" in fields:
@@ -147,6 +155,7 @@ class SchoolScopedMixin:
         return fields
 
     def get_readonly_fields(self, request, obj=None):
+        """Make school readonly for scoped users"""
         readonly = list(super().get_readonly_fields(request, obj))
         
         if self._is_scoped(request) and obj and "school" not in readonly:
@@ -155,6 +164,7 @@ class SchoolScopedMixin:
         return readonly
 
     def get_list_filter(self, request):
+        """Remove school from list filters for scoped users (already filtered)"""
         filters = list(super().get_list_filter(request))
         
         if self._is_scoped(request) and "school" in filters:
@@ -163,12 +173,45 @@ class SchoolScopedMixin:
         return filters
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Restrict foreign key choices to user's school"""
         school = self._user_school(request)
 
-        if self._is_scoped(request) and school and db_field.name == "school":
-            kwargs["queryset"] = School.objects.filter(pk=school.pk)
+        if self._is_scoped(request) and school:
+            # Map models to their school filter
+            mapping = {
+                School:          School.objects.filter(pk=school.pk),
+                User:            User.objects.filter(school=school),
+                EmployeeProfile: EmployeeProfile.objects.filter(school=school),
+                StudentProfile:  StudentProfile.objects.filter(school=school),
+                ClassLevel:      ClassLevel.objects.filter(school=school),
+                Stream:          Stream.objects.filter(school=school),
+                Subject:         Subject.objects.filter(school=school),
+            }
+            
+            if db_field.related_model in mapping:
+                kwargs['queryset'] = mapping[db_field.related_model]
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        """Restrict many-to-many choices to user's school"""
+        school = self._user_school(request)
+        
+        if self._is_scoped(request) and school and db_field.related_model == ParentProfile:
+            kwargs['queryset'] = ParentProfile.objects.filter(school=school)
+        
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+    def get_search_results(self, request, queryset, search_term):
+        """Restrict search results to user's school"""
+        queryset, use_distinct = super().get_search_results(request, queryset, search_term)
+        
+        if self._is_scoped(request):
+            school = self._user_school(request)
+            if school:
+                queryset = queryset.filter(**{self.school_field: school})
+        
+        return queryset, use_distinct
 
 
 # ── Scoped inline base ─────────────────────────────────────────────────────
@@ -203,6 +246,7 @@ class SchoolScopedInline(admin.StackedInline):
                 if school:
                     obj.school = school
                 else:
+                    from django.contrib import messages
                     messages.error(request, "You are not associated with a school.")
                     return
 
@@ -222,7 +266,6 @@ class SchoolScopedInline(admin.StackedInline):
                 kwargs['queryset'] = mapping[db_field.related_model]
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
 
 # ── Inlines ────────────────────────────────────────────────────────────────
 
@@ -548,4 +591,4 @@ class TimetableAdmin(SchoolScopedMixin, ImportExportModelAdmin):
         (None, {
             'fields': ('class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
         }),
-    )
+    )ss
