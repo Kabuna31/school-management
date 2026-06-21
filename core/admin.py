@@ -317,10 +317,26 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
 @admin.register(Stream)
 class StreamAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     resource_class = StreamResource
-    list_display     = ('name', 'school', 'student_count')
-    list_filter      = ('school',)
-    search_fields    = ('name',)
-
+    list_display = ('name', 'school', 'student_count')
+    list_filter = ('school',)
+    search_fields = ('name',)
+    
+    # Force school field in form
+    fields = ('name', 'school')
+    
+    def get_fields(self, request, obj=None):
+        """Ensure school field is always present"""
+        fields = list(super().get_fields(request, obj))
+        if 'school' not in fields:
+            fields.append('school')
+        return fields
+    
+    def save_model(self, request, obj, form, change):
+        """Set school from user if not provided"""
+        if not obj.school_id and request.user.school:
+            obj.school = request.user.school
+        super().save_model(request, obj, form, change)
+    
     @admin.display(description='Students')
     def student_count(self, obj):
         return StudentProfile.objects.filter(stream=obj).count()
@@ -348,7 +364,6 @@ class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     
     def save_model(self, request, obj, form, change):
         """Set school from user if not provided"""
-        # If school is not set and user has a school, use it
         if not obj.school_id and request.user.school:
             obj.school = request.user.school
         super().save_model(request, obj, form, change)
