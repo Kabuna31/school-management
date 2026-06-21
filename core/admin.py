@@ -79,7 +79,24 @@ ROLE_COLORS = {
     'student':        '#374151',
 }
 
+# ------------------------------AutoSchoolAllocation--------------------------
+class AutoSchoolModelAdmin(ImportExportModelAdmin):
+    def save_model(self, request, obj, form, change):
+        if hasattr(obj, "school") and not obj.school_id:
+            if request.user.school:
+                obj.school = request.user.school
+            else:
+                from .models import School
+                first_school = School.objects.first()
+                if first_school:
+                    obj.school = first_school
+        
+        super().save_model(request, obj, form, change)
 
+# Then all admin classes inherit from AutoSchoolModelAdmin instead of ImportExportModelAdmin
+@admin.register(Subject)
+class SubjectAdmin(AutoSchoolModelAdmin):
+    
 # ── Scoped mixin ──────────────────────────────────────────────────────────
 
 class SchoolScopedMixin:
