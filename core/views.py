@@ -825,185 +825,176 @@ class MarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, Te
 
 
 # ============================================================
-# Download / Export Views
+# Performance Analytics View
 # ============================================================
 
-class DownloadReportPDFView(
-    LoginRequiredMixin,
-    RoleRequiredMixin,
-    SchoolScopedMixin,
-    View
-):
-    required_roles = [
-        "system_admin",
-        "school_admin",
-        "headteacher",
-        "dos",
-        "teacher",
-    ]
-
-    def get(self, request, report_type, item_id, *args, **kwargs):
-
+class PerformanceAnalyticsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    template_name = "core/reports/analytics.html"
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
         school = self.get_school()
+        term = self.request.GET.get('term')
+        exam = self.request.GET.get('exam')
+        
+        marks = Mark.objects.filter(school=school)
+        if term:
+            marks = marks.filter(term=term)
+        if exam:
+            marks = marks.filter(exam=exam)
+        
+        total_marks = marks.count()
+        avg_score = mark_average(marks)
+        
+        grade_dist = {}
+        for grade in ['A', 'B', 'C', 'D', 'F']:
+            grade_marks = [m for m in marks if m.grade == grade]
+            count = len(grade_marks)
+            if count > 0:
+                grade_dist[grade] = {
+                    'count': count,
+                    'percentage': (count / total_marks * 100) if total_marks > 0 else 0
+                }
+        
+        ctx["total_marks"] = total_marks
+        ctx["total_students"] = StudentProfile.objects.filter(school=school).count()
+        ctx["avg_score"] = avg_score
+        ctx["grade_distribution"] = grade_dist
+        ctx["terms"] = [t[0] for t in TERM_CHOICES]
+        ctx["exams"] = [e[0] for e in EXAM_CHOICES]
+        ctx["selected_term"] = term
+        ctx["selected_exam"] = exam
+        return ctx
 
-        html = self._get_report_html(
-            request=request,
-            report_type=report_type,
-            item_id=item_id,
-            school=school,
-        )
 
-        if not html:
-            return HttpResponse(
-                "Report not found.",
-                status=404,
-            )
-
+class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher']
+    
+    def get(self, request, report_type, item_id, *args, **kwargs):
+        school = self.get_school()
+        html_string = self._get_report_html(request, report_type, item_id, school)
+        
+        if not html_string:
+            return HttpResponse("Report not found", status=404)
+        
         try:
             from weasyprint import HTML, CSS
             from weasyprint.text.fonts import FontConfiguration
-
+            
             font_config = FontConfiguration()
-
-            pdf = HTML(
-                string=html
-            ).write_pdf(
-                stylesheets=[
-                    CSS(
-                        string="""
-                        @page {
-                            size: A4;
-                            margin: 1cm;
-                        }
-                        """
-                    )
-                ],
-                font_config=font_config,
-            )
-
-            response = HttpResponse(
-                pdf,
-                content_type="application/pdf",
-            )
-
-            response[
-                "Content-Disposition"
-            ] = (
-                f'attachment; filename="{report_type}_{item_id}.pdf"'
-            )
-
+            html = HTML(string=html_string)
+            css = CSS(string='@page { size: A4; margin: 1cm; }')
+            pdf = html.write_pdf(font_config=font_config, stylesheets=[css])
+            
+            response = HttpResponse(pdf, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{report_type}_report_{item_id}.pdf"'
             return response
-
+            
         except ImportError:
-
-            response = HttpResponse(
-                html,
-                content_type="text/html",
-            )
-
-            response[
-                "Content-Disposition"
-            ] = (
-                f'attachment; filename="{report_type}_{item_id}.html"'
-            )
-
+            response = HttpResponse(html_string, content_type='text/html')
+            response['Content-Disposition'] = f'attachment; filename="{report_type}_report_{item_id}.html"'
             return response
-
-    def _get_report_html(
-        self,
-        request,
-        report_type,
-        item_id,
-        school,
-    ):
-
-        report = ReportGenerator(
-            school=school
-        )
-
-        context = {
-            "is_pdf": True,
-        }
-
-        if report_type == "student":
-
-            context.update({
-                "report": report.student_performance_report(
-                    item_id
-                ),
-
-                "student": get_object_or_404(
-                    StudentProfile,
-                    pk=item_id,
-                ),
-            })
-
-            template = (
-                "core/reports/student_report.html"
-            )
-
-        elif report_type == "class":
-
-            filters = {
-                "pk": item_id
-            }
-
-            if school:
-                filters["school"] = school
-
-            context.update({
-                "report": report.class_performance_report(),
-
-                "class_level": get_object_or_404(
-                    ClassLevel,
-                    **filters,
-                ),
-            })
-
-            template = (
-                "core/reports/class_report.html"
-            )
-
-        elif report_type == "term":
-
-            context.update({
-                "report": report.term_report(),
-                "term": item_id,
-            })
-
-            template = (
-                "core/reports/term_report.html"
-            )
-
-        elif report_type == "subject":
-
-            subject_filters = {
-                "pk": item_id
-            }
-
-            if school:
-                subject_filters["school"] = school
-
-            context.update({
-                "report": report.subject_performance_report(
-                    item_id
-                ),
-
-                "subject": get_object_or_404(
-                    Subject,
-                    **subject_filters,
-                ),
-            })
-
-            template = (
-                "core/reports/subject_report.html"
-            )
-
+    
+    def _get_report_html(self, request, report_type, item_id, school):
+        """Get HTML for the report"""
+        context = {}
+        report = ReportGenerator(school=school)
+        
+        if report_type == 'student':
+            context['report'] = report.student_performance_report(item_id)
+            context['student'] = get_object_or_404(StudentProfile, pk=item_id)
+            context['is_pdf'] = True
+            template = 'core/reports/student_report.html'
+        
+        elif report_type == 'class':
+            context['report'] = report.class_performance_report()
+            context['class_level'] = get_object_or_404(ClassLevel, pk=item_id, school=school)
+            context['school'] = school
+            context['is_pdf'] = True
+            template = 'core/reports/class_report.html'
+        
+        elif report_type == 'term':
+            context['report'] = report.term_report()
+            context['term'] = item_id
+            context['exam'] = request.GET.get('exam')
+            context['is_pdf'] = True
+            template = 'core/reports/term_report.html'
+        
+        elif report_type == 'subject':
+            context['report'] = report.subject_performance_report(item_id)
+            context['subject'] = get_object_or_404(Subject, pk=item_id, school=school)
+            context['is_pdf'] = True
+            template = 'core/reports/subject_report.html'
+        
+        elif report_type == 'marksheet':
+            marksheet = report.generate_marksheet(item_id, request.GET.get('term'))
+            if not marksheet:
+                return None
+            context['marksheet'] = marksheet
+            context['student'] = get_object_or_404(StudentProfile, pk=item_id)
+            context['term'] = request.GET.get('term')
+            context['is_pdf'] = True
+            template = 'core/reports/marksheet.html'
+        
         else:
             return None
+        
+        return render_to_string(template, context, request)
 
-        return render_to_string(
-            template_name=template,
-            context=context,
-            request=request,
-        )
+class ExportReportJSONView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher']
+    
+    def get(self, request, report_type, item_id, *args, **kwargs):
+        school = self.get_school()
+        report = ReportGenerator(school=school)
+        
+        data = {}
+        
+        if report_type == 'student':
+            data = report.student_performance_report(item_id)
+        elif report_type == 'class':
+            data = report.class_performance_report()
+        elif report_type == 'term':
+            data = report.term_report()
+        elif report_type == 'subject':
+            data = report.subject_performance_report(item_id)
+        elif report_type == 'marksheet':
+            data = report.generate_marksheet(item_id, request.GET.get('term'))
+        else:
+            return HttpResponse("Invalid report type", status=400)
+        
+        if not data:
+            return HttpResponse("No data found", status=404)
+        
+        return JsonResponse(data, safe=False)
+
+class PrintMarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    template_name = "core/reports/print_marksheet.html"
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher', 'student', 'parent']
+    
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        school = self.get_school()
+        student_id = self.kwargs.get('student_id')
+        term = self.request.GET.get('term')
+        
+        if not student_id and self.request.user.role == 'student':
+            try:
+                student = StudentProfile.objects.get(user=self.request.user)
+                student_id = student.pk
+            except StudentProfile.DoesNotExist:
+                pass
+        
+        report = ReportGenerator(school=school)
+        marksheet = report.generate_marksheet(student_id, term)
+        
+        if not marksheet:
+            ctx['error'] = "No marks found for this student."
+        else:
+            ctx['marksheet'] = marksheet
+            ctx['student'] = get_object_or_404(StudentProfile, pk=student_id)
+            ctx['term'] = term
+        
+        return ctx
+
