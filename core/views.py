@@ -436,7 +436,7 @@ class TeacherMarkEntryView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMi
         if selected_class and selected_stream:
             students = StudentProfile.objects.filter(
                 school=school,
-                class_level_id=selected_class,
+                class_level=selected_class,
                 stream_id=selected_stream
             ).select_related("user")
         
@@ -491,7 +491,7 @@ class TeacherMarkEntryView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMi
         
         students = StudentProfile.objects.filter(
             school=school,
-            class_level_id=class_level,
+            class_level=class_level,
             stream_id=stream
         )
         
@@ -693,7 +693,6 @@ class ClassMarksView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, T
         ctx["terms"] = [t[0] for t in TERM_CHOICES]
         return ctx
 
-
 # ============================================================
 # Report Views
 # ============================================================
@@ -742,9 +741,10 @@ class ClassReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, 
         term = self.request.GET.get('term')
         exam = self.request.GET.get('exam')
         
+        # ✅ FIXED: Use 'class_level' instead of 'class_level_id'
         report = ReportGenerator(
             school=school,
-            class_level_id=class_id if class_id else None,
+            class_level=class_id if class_id else None,
             term=term,
             exam=exam
         )
@@ -868,6 +868,10 @@ class PerformanceAnalyticsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScop
         return ctx
 
 
+# ============================================================
+# Download/Export Views
+# ============================================================
+
 class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
     required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher']
     
@@ -942,6 +946,7 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedM
         
         return render_to_string(template, context, request)
 
+
 class ExportReportJSONView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
     required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher']
     
@@ -968,6 +973,7 @@ class ExportReportJSONView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMi
             return HttpResponse("No data found", status=404)
         
         return JsonResponse(data, safe=False)
+
 
 class PrintMarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
     template_name = "core/reports/print_marksheet.html"
@@ -997,4 +1003,3 @@ class PrintMarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
             ctx['term'] = term
         
         return ctx
-
