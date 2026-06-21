@@ -36,10 +36,14 @@ ROLE_CHOICES = (
     ('student',        'Student'),
 )
 
-# Roles that are scoped to their own school (used by admin + views)
+# Roles that are scoped to their own school (used by admin + views).
+# Every role that gets a school assigned must be listed here so that
+# admin querysets, dropdowns, and save logic restrict them correctly.
+# system_admin is intentionally excluded — they see all schools.
 SCOPED_ROLES = [
     'school_admin', 'headteacher', 'dos', 'bursar',
     'nurse', 'librarian', 'lab_technician', 'class_teacher',
+    'teacher', 'parent', 'student',
 ]
 
 # Roles that can enter / edit marks
@@ -60,21 +64,29 @@ DASHBOARD_ROLES = [
 
 
 class User(AbstractUser):
+    """
+    Custom User model with school scoping.
+
+    Rules enforced in clean():
+    - system_admin: MUST have school = None (sees all schools)
+    - All other roles: MUST have a school assigned
+    """
     school = models.ForeignKey(
         School,
         on_delete=models.PROTECT,
         null=True,
-        blank=True
+        blank=True,
+        help_text="School assignment. Leave blank ONLY for System Admin.",
     )
     role = models.CharField(
         max_length=30,
         choices=ROLE_CHOICES,
-        default='teacher'
+        default='teacher',
     )
 
     def __str__(self):
-        school_name = self.school.name if self.school_id else "No School"
-        return f"{self.get_full_name() or self.username} ({self.get_role_display()})"
+        school = self.school.name if self.school_id else "No School"
+        return f"{self.get_full_name() or self.username} ({self.get_role_display()}) — {school}"
 
     @property
     def is_system_admin(self):
@@ -86,15 +98,40 @@ class User(AbstractUser):
         return self.role in SCOPED_ROLES
 
     def clean(self):
+        """
+        Called by Django forms and admin (not by save()).
+        Validates school/role consistency so errors surface cleanly in the UI.
+        """
         super().clean()
-        # Only system admin can have no school
-        if self.role != "system_admin" and self.school is None:
+
+        if self.role == 'system_admin' and self.school_id:
             raise ValidationError({
-                "school": "School is required for this user role."
+                'school': (
+                    "System Admin users cannot be assigned to a specific school. "
+                    "They see all schools."
+                )
+            })
+
+        if self.role != 'system_admin' and not self.school_id:
+            raise ValidationError({
+                'school': (
+                    f"School is required for {self.get_role_display()} users. "
+                    "Only System Admin can have no school."
+                )
             })
 
     def save(self, *args, **kwargs):
-        self.full_clean()
+        """
+        Auto-correct system_admin fields before saving.
+        Validation is intentionally left to clean() / forms so that
+        programmatic saves (management commands, signals, tests) do not
+        raise ValidationError unexpectedly.
+        """
+        if self.role == 'system_admin':
+            self.school    = None
+            self.school_id = None
+            self.is_superuser = True
+            self.is_staff     = True
         super().save(*args, **kwargs)
 
 
@@ -113,6 +150,15 @@ class EmployeeProfile(models.Model):
     def __str__(self):
         return f"{self.user.get_full_name()} [{self.staff_id}]"
 
+    def clean(self):
+        """Ensure the employee's school matches the linked user's school."""
+        super().clean()
+        if self.user_id and self.school_id:
+            if self.user.school_id != self.school_id:
+                raise ValidationError(
+                    "Employee profile school must match the linked user's school."
+                )
+
 
 class ParentProfile(models.Model):
     school       = models.ForeignKey(School, on_delete=models.CASCADE)
@@ -121,6 +167,15 @@ class ParentProfile(models.Model):
 
     def __str__(self):
         return self.user.get_full_name() or self.user.username
+
+    def clean(self):
+        """Ensure the parent's school matches the linked user's school."""
+        super().clean()
+        if self.user_id and self.school_id:
+            if self.user.school_id != self.school_id:
+                raise ValidationError(
+                    "Parent profile school must match the linked user's school."
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +228,15 @@ class StudentProfile(models.Model):
     def __str__(self):
         return f"{self.user.get_full_name()} ({self.admission_number})"
 
+    def clean(self):
+        """Ensure the student's school matches the linked user's school."""
+        super().clean()
+        if self.user_id and self.school_id:
+            if self.user.school_id != self.school_id:
+                raise ValidationError(
+                    "Student profile school must match the linked user's school."
+                )
+
 
 # ---------------------------------------------------------------------------
 # 5. Subjects & Marks
@@ -189,20 +253,17 @@ class Subject(models.Model):
         return f"{self.name} ({self.code})"
 
 
-# Term choices — stored directly on Mark so views can filter by DB field
 TERM_CHOICES = [
     ('Term 1', 'Term 1'),
     ('Term 2', 'Term 2'),
     ('Term 3', 'Term 3'),
 ]
 
-# Exam slot choices within a term
 EXAM_CHOICES = [
-    ('Mid Term', 'Mid Term'),
+    ('Mid Term',    'Mid Term'),
     ('End of Term', 'End of Term'),
 ]
 
-# Combined label used in __str__ and displays
 EXAM_LABEL_MAP = {
     ('Term 1', 'Mid Term'):    'Term 1 — Mid Term',
     ('Term 1', 'End of Term'): 'Term 1 — End of Term',
@@ -218,30 +279,22 @@ class Mark(models.Model):
     student = models.ForeignKey(StudentProfile, on_delete=models.CASCADE)
     subject = models.ForeignKey(Subject,        on_delete=models.CASCADE)
     teacher = models.ForeignKey(
-        EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True
+        EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True,
     )
-    # Stored as DB fields so views can filter/annotate on them
-    term    = models.CharField(max_length=10, choices=TERM_CHOICES)
-    exam    = models.CharField(max_length=15, choices=EXAM_CHOICES)
-
-    # Two score columns: mid-term and end-of-term within the same record
+    term     = models.CharField(max_length=10, choices=TERM_CHOICES)
+    exam     = models.CharField(max_length=15, choices=EXAM_CHOICES)
     mid_term = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     end_term = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
 
     class Meta:
-        # One record per student/subject/term/exam slot
         unique_together = ('school', 'student', 'subject', 'term', 'exam')
 
     def __str__(self):
         label = EXAM_LABEL_MAP.get((self.term, self.exam), f"{self.term} {self.exam}")
         return f"{self.student} — {self.subject} {label}"
 
-    # ------------------------------------------------------------------
-    # Computed helpers (read-only; not stored)
-    # ------------------------------------------------------------------
     @property
     def total_score(self):
-        """Combined score used for grading."""
         return float(self.mid_term or 0) + float(self.end_term or 0)
 
     @property

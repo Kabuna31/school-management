@@ -38,11 +38,11 @@ def _patched_index(self, request, extra_context=None):
         and school
     )
 
-    mark_qs    = Mark.objects.filter(school=school)            if is_scoped else Mark.objects.all()
-    student_qs = StudentProfile.objects.filter(school=school)  if is_scoped else StudentProfile.objects.all()
-    staff_qs   = EmployeeProfile.objects.filter(school=school) if is_scoped else EmployeeProfile.objects.all()
-    subject_qs = Subject.objects.filter(school=school)         if is_scoped else Subject.objects.all()
-    school_qs  = School.objects.filter(pk=school.pk)           if is_scoped else School.objects.all()
+    mark_qs    = Mark.objects.filter(school=school)           if is_scoped else Mark.objects.all()
+    student_qs = StudentProfile.objects.filter(school=school) if is_scoped else StudentProfile.objects.all()
+    staff_qs   = EmployeeProfile.objects.filter(school=school)if is_scoped else EmployeeProfile.objects.all()
+    subject_qs = Subject.objects.filter(school=school)        if is_scoped else Subject.objects.all()
+    school_qs  = School.objects.filter(pk=school.pk)          if is_scoped else School.objects.all()
 
     avg = mark_qs.annotate(
         total=ExpressionWrapper(F('mid_term') + F('end_term'), output_field=FloatField())
@@ -80,131 +80,112 @@ ROLE_COLORS = {
 }
 
 
-# ── Auto School Admin (Fixes the school assignment issue) ────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────
 
-class AutoSchoolAdmin(ImportExportModelAdmin):
+def _assign_school(request, obj):
     """
-    Base admin class that auto-assigns school for all models.
-    Forces school assignment for ClassLevel, Stream, Subject, etc.
+    Assign the school FK on obj from the requesting user's school.
+    Falls back to the first School in the database if the user has none.
+    Returns False (and emits an error message) if no school exists at all.
     """
-    
-    def save_model(self, request, obj, form, change):
-        """Force auto-assign school from user's profile"""
-        if hasattr(obj, "school"):
-            # Always set school for scoped users
-            if request.user.school:
-                obj.school = request.user.school
-                # Force set the school_id directly
-                obj.school_id = request.user.school.id
-            else:
-                # Fallback to first school
-                from .models import School
-                first_school = School.objects.first()
-                if first_school:
-                    obj.school = first_school
-                    obj.school_id = first_school.id
-                else:
-                    messages.error(request, "No school exists. Please create one first.")
-                    return
-        
-        super().save_model(request, obj, form, change)
+    if not hasattr(obj, 'school'):
+        return True  # nothing to do
+
+    school = getattr(request.user, 'school', None)
+    if school:
+        obj.school = school
+    else:
+        school = School.objects.first()
+        if school:
+            obj.school = school
+        else:
+            messages.error(request, "No school exists. Please create one first.")
+            return False
+    return True
 
 
-# ── Scoped mixin (Filters data and restricts dropdowns) ──────────────────
+# ── School Scoped Mixin ────────────────────────────────────────────────────
 
 class SchoolScopedMixin:
     """
-    Restrict records to user's school.
-    Auto-assignment is now handled by AutoSchoolAdmin.
-    Dropdowns ONLY show data from user's school.
-    """
+    Mixed into ModelAdmin subclasses to restrict every queryset, form field,
+    dropdown, and save to the requesting user's school.
 
-    school_field = "school"
+    Superusers and system_admins bypass all restrictions.
+    """
 
     def _is_scoped(self, request):
         return (
             request.user.is_authenticated
             and not request.user.is_superuser
-            and getattr(request.user, "role", None) in SCOPED_ROLES
+            and getattr(request.user, 'role', None) not in (None, 'system_admin')
+            and getattr(request.user, 'role', None) in SCOPED_ROLES
         )
 
     def _user_school(self, request):
-        return getattr(request.user, "school", None)
+        return getattr(request.user, 'school', None)
+
+    # ── Queryset ───────────────────────────────────────────────────────────
 
     def get_queryset(self, request):
-        """Restrict list views to user's school"""
         qs = super().get_queryset(request)
 
-        if self._is_scoped(request):
-            school = self._user_school(request)
+        if not self._is_scoped(request):
+            return qs
 
-            if school:
-                qs = qs.filter(**{
-                    self.school_field: school
-                })
-            else:
-                qs = qs.none()
+        school = self._user_school(request)
+        if not school:
+            return qs.none()
 
-        return qs
+        if hasattr(self.model, 'school'):
+            return qs.filter(school=school)
+
+        if self.model is User:
+            return (
+                qs.filter(school=school)
+                  .exclude(role='system_admin')
+                  .exclude(is_superuser=True)
+            )
+
+        # Model has no school relationship — hide everything for safety.
+        return qs.none()
+
+    # ── Form fields ────────────────────────────────────────────────────────
 
     def get_fields(self, request, obj=None):
-        """Remove school field from forms for scoped users, except for UserAdmin"""
         fields = list(super().get_fields(request, obj))
-
-        if self._is_scoped(request) and "school" in fields:
-            # For UserAdmin, keep school field (we make it read-only in the form)
-            if hasattr(self, 'model') and self.model == User:
-                pass  # Keep the school field for UserAdmin
-            else:
-                fields.remove("school")  # Remove for all other models
-
+        if self._is_scoped(request) and 'school' in fields:
+            fields.remove('school')
         return fields
 
     def get_readonly_fields(self, request, obj=None):
-        """Make school readonly for scoped users"""
         readonly = list(super().get_readonly_fields(request, obj))
-        
-        if self._is_scoped(request) and obj and "school" not in readonly:
-            readonly.append("school")
-        
+        if self._is_scoped(request) and obj and 'school' not in readonly:
+            readonly.append('school')
         return readonly
 
     def get_list_filter(self, request):
-        """Remove school from list filters for scoped users"""
         filters = list(super().get_list_filter(request))
-        
-        if self._is_scoped(request) and "school" in filters:
-            filters.remove("school")
-        
+        if self._is_scoped(request) and 'school' in filters:
+            filters.remove('school')
         return filters
 
+    # ── FK / M2M dropdowns ─────────────────────────────────────────────────
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """
-        RESTRICT DROPDOWN CHOICES TO USER'S SCHOOL ONLY!
-        This includes hiding system_admin users from other schools.
-        """
         school = self._user_school(request)
 
         if self._is_scoped(request) and school:
-            # Handle User dropdown specially - hide system_admin and other schools
-            if db_field.related_model == User:
-                kwargs['queryset'] = User.objects.filter(
-                    school=school,
-                    role__in=[role for role in dict(User._meta.get_field('role').choices).keys() 
-                              if role != 'system_admin']
-                ).exclude(is_superuser=True)
-            
-            # Handle EmployeeProfile - show only from same school
-            elif db_field.related_model == EmployeeProfile:
-                kwargs['queryset'] = EmployeeProfile.objects.filter(school=school)
-            
-            # Handle ParentProfile - show only from same school
-            elif db_field.related_model == ParentProfile:
-                kwargs['queryset'] = ParentProfile.objects.filter(school=school)
-            
-            # Map other models to their school filter
-            mapping = {
-                School:          School.objects.filter(pk=school.pk),
+            model = db_field.related_model
+
+            # Map related model → scoped queryset
+            scoped = {
+                School:         School.objects.filter(pk=school.pk),
+                User:           User.objects.filter(school=school)
+                                            .exclude(role='system_admin')
+                                            .exclude(is_superuser=True),
+                EmployeeProfile: EmployeeProfile.objects.filter(school=school),
+                ParentProfile:   ParentProfile.objects.filter(school=school),
                 StudentProfile:  StudentProfile.objects.filter(school=school),
                 ClassLevel:      ClassLevel.objects.filter(school=school),
                 Stream:          Stream.objects.filter(school=school),
@@ -212,129 +193,97 @@ class SchoolScopedMixin:
                 Mark:            Mark.objects.filter(school=school),
                 Timetable:       Timetable.objects.filter(school=school),
             }
-            
-            if db_field.related_model in mapping:
-                kwargs['queryset'] = mapping[db_field.related_model]
-            elif hasattr(db_field.related_model, 'school'):
-                # For any model with a school field, filter by school
-                kwargs['queryset'] = db_field.related_model.objects.filter(school=school)
+
+            if model in scoped:
+                kwargs['queryset'] = scoped[model]
+            elif hasattr(model, 'school'):
+                kwargs['queryset'] = model.objects.filter(school=school)
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
-        """Restrict many-to-many choices to user's school"""
         school = self._user_school(request)
-        
+
         if self._is_scoped(request) and school:
-            if db_field.related_model == ParentProfile:
+            model = db_field.related_model
+            if model is ParentProfile:
                 kwargs['queryset'] = ParentProfile.objects.filter(school=school)
-            elif hasattr(db_field.related_model, 'school'):
-                kwargs['queryset'] = db_field.related_model.objects.filter(school=school)
-        
+            elif hasattr(model, 'school'):
+                kwargs['queryset'] = model.objects.filter(school=school)
+
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def get_search_results(self, request, queryset, search_term):
-        """Restrict search results to user's school"""
         queryset, use_distinct = super().get_search_results(request, queryset, search_term)
-        
+
         if self._is_scoped(request):
             school = self._user_school(request)
             if school:
-                queryset = queryset.filter(**{self.school_field: school})
-        
+                if hasattr(queryset.model, 'school'):
+                    queryset = queryset.filter(school=school)
+                elif queryset.model is User:
+                    queryset = queryset.filter(school=school)
+
         return queryset, use_distinct
 
+    # ── Save ───────────────────────────────────────────────────────────────
+
     def save_model(self, request, obj, form, change):
-        """Auto-assign school from user's profile (fallback)"""
-        if hasattr(obj, "school"):
-            if request.user.school:
-                obj.school = request.user.school
-                obj.school_id = request.user.school.id
-            else:
-                from .models import School
-                first_school = School.objects.first()
-                if first_school:
-                    obj.school = first_school
-                    obj.school_id = first_school.id
-                else:
-                    messages.error(request, "No school exists. Please create one first.")
-                    return
-        
+        if not _assign_school(request, obj):
+            return  # error already messaged
         super().save_model(request, obj, form, change)
 
 
-# ── Scoped inline base ─────────────────────────────────────────────────────
+# ── School Scoped Inline ───────────────────────────────────────────────────
 
 class SchoolScopedInline(admin.StackedInline):
-    """Inline version of SchoolScopedMixin with dropdown restrictions"""
+    """Inline version of the school-isolation logic."""
 
     def _is_scoped(self, request):
         return (
             request.user.is_authenticated
             and not request.user.is_superuser
-            and getattr(request.user, "role", None) in SCOPED_ROLES
+            and getattr(request.user, 'role', None) not in (None, 'system_admin')
+            and getattr(request.user, 'role', None) in SCOPED_ROLES
         )
 
     def _user_school(self, request):
-        return getattr(request.user, "school", None)
+        return getattr(request.user, 'school', None)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-
         if self._is_scoped(request):
             school = self._user_school(request)
             if school and hasattr(self.model, 'school'):
                 qs = qs.filter(school=school)
-
         return qs
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Restrict dropdown choices to user's school in inlines"""
         school = self._user_school(request)
 
         if self._is_scoped(request) and school:
-            # Handle User dropdown specially - hide system_admin
-            if db_field.related_model == User:
-                kwargs['queryset'] = User.objects.filter(
-                    school=school,
-                    role__in=[role for role in dict(User._meta.get_field('role').choices).keys() 
-                              if role != 'system_admin']
-                ).exclude(is_superuser=True)
-            
-            # Handle EmployeeProfile
-            elif db_field.related_model == EmployeeProfile:
-                kwargs['queryset'] = EmployeeProfile.objects.filter(school=school)
-            
-            # Handle ParentProfile
-            elif db_field.related_model == ParentProfile:
-                kwargs['queryset'] = ParentProfile.objects.filter(school=school)
-            
-            mapping = {
+            model = db_field.related_model
+
+            scoped = {
+                User:            User.objects.filter(school=school)
+                                             .exclude(role='system_admin')
+                                             .exclude(is_superuser=True),
+                EmployeeProfile: EmployeeProfile.objects.filter(school=school),
+                ParentProfile:   ParentProfile.objects.filter(school=school),
+                StudentProfile:  StudentProfile.objects.filter(school=school),
                 ClassLevel:      ClassLevel.objects.filter(school=school),
                 Stream:          Stream.objects.filter(school=school),
                 Subject:         Subject.objects.filter(school=school),
-                StudentProfile:  StudentProfile.objects.filter(school=school),
             }
-            if db_field.related_model in mapping:
-                kwargs['queryset'] = mapping[db_field.related_model]
+
+            if model in scoped:
+                kwargs['queryset'] = scoped[model]
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
-        """Auto-assign school for inline forms"""
-        if hasattr(obj, "school"):
-            if request.user.school:
-                obj.school = request.user.school
-                obj.school_id = request.user.school.id
-            else:
-                from .models import School
-                first_school = School.objects.first()
-                if first_school:
-                    obj.school = first_school
-                    obj.school_id = first_school.id
-                else:
-                    return
-
+        if not _assign_school(request, obj):
+            return
         super().save_model(request, obj, form, change)
 
 
@@ -364,85 +313,105 @@ class StudentProfileInline(SchoolScopedInline):
     verbose_name_plural = 'Student Profile'
     fk_name             = 'user'
     extra               = 0
-    fields              = (
-        'admission_number', 'gender',
-        'class_level', 'stream', 'passport_photo',
-    )
+    fields              = ('admission_number', 'gender', 'class_level', 'stream', 'passport_photo')
 
 
-# ── School ─────────────────────────────────────────────────────────────────
+# ── School Admin ───────────────────────────────────────────────────────────
 
 @admin.register(School)
 class SchoolAdmin(ImportExportModelAdmin):
     resource_class = SchoolResource
-    list_display     = ('name', 'code', 'phone', 'email')
-    search_fields    = ('name', 'code')
+    list_display   = ('name', 'code', 'phone', 'email')
+    search_fields  = ('name', 'code')
 
 
-# ── User ───────────────────────────────────────────────────────────────────
+# ── User Admin ─────────────────────────────────────────────────────────────
 
 @admin.register(User)
-class UserAdmin(ImportExportModelAdmin, BaseUserAdmin):
+class UserAdmin(SchoolScopedMixin, ImportExportModelAdmin, BaseUserAdmin):
+    """
+    SchoolScopedMixin must come first in MRO so its get_queryset / save_model
+    take precedence. We then selectively delegate to BaseUserAdmin where needed.
+    """
 
     resource_class = UserResource
-
-    list_display = (
-        'username',
-        'full_name',
-        'role_badge',
-        'is_active',
-        'date_joined',
-    )
-
-    list_filter = (
-        'role',
-        'is_active',
-    )
-
-    search_fields = (
-        'username',
-        'email',
-        'first_name',
-        'last_name',
-    )
-
-    ordering = ('-date_joined',)
+    list_display   = ('username', 'full_name', 'role_badge', 'school', 'is_active', 'date_joined')
+    list_filter    = ('role', 'school', 'is_active')
+    search_fields  = ('username', 'email', 'first_name', 'last_name')
+    ordering       = ('-date_joined',)
 
     fieldsets = BaseUserAdmin.fieldsets + (
-        ('Role', {
-            'fields': ('role',)
+        ('School & Role', {'fields': ('school', 'role')}),
+    )
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields':  ('username', 'password1', 'password2', 'school', 'role'),
         }),
     )
 
-    add_fieldsets = (
-        (
-            None,
-            {
-                'classes': ('wide',),
-                'fields': (
-                    'username',
-                    'password1',
-                    'password2',
-                    'role',
-                ),
-            },
-        ),
-    )
+    # Let BaseUserAdmin handle field/readonly logic (not SchoolScopedMixin),
+    # because UserAdmin manages school isolation differently via get_form.
+    def get_fields(self, request, obj=None):
+        return BaseUserAdmin.get_fields(self, request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        return BaseUserAdmin.get_readonly_fields(self, request, obj)
+
+    def get_queryset(self, request):
+        # Use SchoolScopedMixin logic (already handles User correctly).
+        return SchoolScopedMixin.get_queryset(self, request)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if self._is_scoped(request) and db_field.name == 'school':
+            kwargs['queryset'] = School.objects.filter(pk=request.user.school.pk)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+
+        if self._is_scoped(request):
+            # Hide system_admin role choice
+            role_field = form.base_fields.get('role')
+            if role_field:
+                role_field.choices = [c for c in role_field.choices if c[0] != 'system_admin']
+
+            # Lock school field to user's own school
+            school_field = form.base_fields.get('school')
+            if school_field:
+                school_field.queryset = School.objects.filter(pk=request.user.school.pk)
+                school_field.initial  = request.user.school
+                school_field.widget.attrs['readonly'] = True
+
+        # When editing a system_admin, blank out the school field
+        if obj and obj.role == 'system_admin':
+            school_field = form.base_fields.get('school')
+            if school_field:
+                school_field.queryset = School.objects.none()
+                school_field.initial  = None
+                school_field.required = False
+                school_field.widget.attrs['readonly'] = True
+
+        return form
 
     def save_model(self, request, obj, form, change):
+        if self._is_scoped(request) and obj.role == 'system_admin':
+            messages.error(request, "You cannot create a System Admin user.")
+            return
 
         if obj.role == 'system_admin':
+            # system_admin must have no school and full Django staff/superuser flags
+            obj.school      = None
             obj.is_superuser = True
-            obj.is_staff = True
-            obj.school = None
-
+            obj.is_staff    = True
         else:
-            obj.is_staff = True
-
-            if not obj.school:
+            if self._is_scoped(request):
                 obj.school = request.user.school
+            obj.is_superuser = False
+            obj.is_staff    = True
 
-        super().save_model(request, obj, form, change)
+        # Skip SchoolScopedMixin.save_model — school already handled above.
+        ImportExportModelAdmin.save_model(self, request, obj, form, change)
 
     @admin.display(description='Name')
     def full_name(self, obj):
@@ -451,51 +420,52 @@ class UserAdmin(ImportExportModelAdmin, BaseUserAdmin):
     @admin.display(description='Role')
     def role_badge(self, obj):
         color = ROLE_COLORS.get(obj.role, '#374151')
-
         return format_html(
-            '<span style="background:{};color:white;padding:4px 10px;border-radius:30px;">{}</span>',
-            color,
-            obj.get_role_display()
+            '<span style="background:{};color:white;padding:4px 10px;'
+            'border-radius:30px;font-size:11px;font-weight:600;">{}</span>',
+            color, obj.get_role_display(),
         )
-# ── Stream ─────────────────────────────────────────────────────────────────
+
+
+# ── Stream Admin ───────────────────────────────────────────────────────────
 
 @admin.register(Stream)
-class StreamAdmin(AutoSchoolAdmin, SchoolScopedMixin):
+class StreamAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     resource_class = StreamResource
-    list_display = ('name', 'school', 'student_count')
-    list_filter = ('school',)
-    search_fields = ('name',)
-    
+    list_display   = ('name', 'school', 'student_count')
+    list_filter    = ('school',)
+    search_fields  = ('name',)
+
     @admin.display(description='Students')
     def student_count(self, obj):
         return StudentProfile.objects.filter(stream=obj).count()
 
 
-# ── ClassLevel ─────────────────────────────────────────────────────────────
+# ── ClassLevel Admin ───────────────────────────────────────────────────────
 
 @admin.register(ClassLevel)
-class ClassLevelAdmin(AutoSchoolAdmin, SchoolScopedMixin):
-    resource_class = ClassLevelResource
-    list_display = ('name', 'school', 'class_teacher', 'student_count')
-    list_filter = ('school',)
-    search_fields = ('name',)
+class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+    resource_class     = ClassLevelResource
+    list_display       = ('name', 'school', 'class_teacher', 'student_count')
+    list_filter        = ('school',)
+    search_fields      = ('name',)
     autocomplete_fields = ('class_teacher',)
-    
+
     @admin.display(description='Students')
     def student_count(self, obj):
         return StudentProfile.objects.filter(class_level=obj).count()
 
 
-# ── Subject ────────────────────────────────────────────────────────────────
+# ── Subject Admin ──────────────────────────────────────────────────────────
 
 @admin.register(Subject)
-class SubjectAdmin(AutoSchoolAdmin, SchoolScopedMixin):
+class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     resource_class = SubjectResource
-    list_display = ('name', 'code', 'school', 'avg_total')
-    list_filter = ('school',)
-    search_fields = ('name', 'code')
-    ordering = ('school', 'name')
-    
+    list_display   = ('name', 'code', 'school', 'avg_total')
+    list_filter    = ('school',)
+    search_fields  = ('name', 'code')
+    ordering       = ('school', 'name')
+
     @admin.display(description='Avg Total')
     def avg_total(self, obj):
         avg = Mark.objects.filter(subject=obj).annotate(
@@ -504,20 +474,18 @@ class SubjectAdmin(AutoSchoolAdmin, SchoolScopedMixin):
         if avg is None:
             return '—'
         color = '#166534' if avg >= 50 else '#991b1b'
-        return format_html(
-            '<strong style="color:{}">{}</strong>', color, f"{avg:.1f}",
-        )
+        return format_html('<strong style="color:{}">{}</strong>', color, f"{avg:.1f}")
 
 
-# ── EmployeeProfile ────────────────────────────────────────────────────────
+# ── EmployeeProfile Admin ──────────────────────────────────────────────────
 
 @admin.register(EmployeeProfile)
-class EmployeeProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
+class EmployeeProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     resource_class = EmployeeProfileResource
-    list_display     = ('full_name', 'role_badge', 'school', 'staff_id', 'hire_date')
-    list_filter      = ('school', 'user__role')
-    search_fields    = ('user__username', 'user__first_name', 'user__last_name', 'staff_id')
-    ordering         = ('school', 'staff_id')
+    list_display   = ('full_name', 'role_badge', 'school', 'staff_id', 'hire_date')
+    list_filter    = ('school', 'user__role')
+    search_fields  = ('user__username', 'user__first_name', 'user__last_name', 'staff_id')
+    ordering       = ('school', 'staff_id')
 
     @admin.display(description='Name')
     def full_name(self, obj):
@@ -533,14 +501,14 @@ class EmployeeProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
         )
 
 
-# ── ParentProfile ──────────────────────────────────────────────────────────
+# ── ParentProfile Admin ────────────────────────────────────────────────────
 
 @admin.register(ParentProfile)
-class ParentProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
+class ParentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     resource_class = ParentProfileResource
-    list_display     = ('full_name', 'school', 'phone_number', 'children_count')
-    list_filter      = ('school',)
-    search_fields    = ('user__username', 'user__first_name', 'user__last_name', 'phone_number')
+    list_display   = ('full_name', 'school', 'phone_number', 'children_count')
+    list_filter    = ('school',)
+    search_fields  = ('user__username', 'user__first_name', 'user__last_name', 'phone_number')
 
     @admin.display(description='Name')
     def full_name(self, obj):
@@ -551,21 +519,21 @@ class ParentProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
         return obj.children.count()
 
 
-# ── StudentProfile ─────────────────────────────────────────────────────────
+# ── StudentProfile Admin ───────────────────────────────────────────────────
 
 @admin.register(StudentProfile)
-class StudentProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
-    resource_class = StudentProfileResource
-    list_display = (
+class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+    resource_class    = StudentProfileResource
+    list_display      = (
         'full_name', 'admission_number', 'school',
         'class_level', 'stream', 'gender_badge', 'marks_count',
     )
-    list_filter = ('school', 'class_level', 'stream', 'gender')
-    search_fields = ('user__username', 'user__first_name', 'user__last_name', 'admission_number')
+    list_filter       = ('school', 'class_level', 'stream', 'gender')
+    search_fields     = ('user__username', 'user__first_name', 'user__last_name', 'admission_number')
     filter_horizontal = ('parent',)
-    ordering = ('school', 'class_level', 'stream', 'user__first_name')
-    list_per_page = 30
-    readonly_fields = ('passport_preview',)
+    ordering          = ('school', 'class_level', 'stream', 'user__first_name')
+    list_per_page     = 30
+    readonly_fields   = ('passport_preview',)
 
     fieldsets = (
         ('Personal', {
@@ -595,7 +563,7 @@ class StudentProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
     @admin.display(description='Marks')
     def marks_count(self, obj):
         count = Mark.objects.filter(student=obj).count()
-        url = reverse('admin:core_mark_changelist') + f'?student__user__username={obj.user.username}'
+        url   = reverse('admin:core_mark_changelist') + f'?student__user__username={obj.user.username}'
         return format_html('<a href="{}">{} entries</a>', url, count)
 
     @admin.display(description='Current Photo')
@@ -608,24 +576,24 @@ class StudentProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
         return '—'
 
 
-# ── Mark ───────────────────────────────────────────────────────────────────
+# ── Mark Admin ─────────────────────────────────────────────────────────────
 
 @admin.register(Mark)
-class MarkAdmin(AutoSchoolAdmin, SchoolScopedMixin):
+class MarkAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     resource_class = MarkResource
-    list_display     = (
+    list_display   = (
         'student_name', 'subject', 'term', 'exam',
         'mid_term', 'end_term', 'total_display', 'grade_badge',
         'teacher_name', 'school',
     )
-    list_filter      = ('school', 'term', 'exam', 'subject', 'student__class_level', 'student__stream')
-    search_fields    = (
+    list_filter    = ('school', 'term', 'exam', 'subject', 'student__class_level', 'student__stream')
+    search_fields  = (
         'student__user__first_name', 'student__user__last_name',
         'student__admission_number', 'subject__name',
     )
-    ordering      = ('school', 'term', 'exam', 'student__user__first_name')
-    list_per_page = 40
-    list_editable = ('mid_term', 'end_term')
+    ordering       = ('school', 'term', 'exam', 'student__user__first_name')
+    list_per_page  = 40
+    list_editable  = ('mid_term', 'end_term')
 
     @admin.display(description='Student')
     def student_name(self, obj):
@@ -643,26 +611,21 @@ class MarkAdmin(AutoSchoolAdmin, SchoolScopedMixin):
     def grade_badge(self, obj):
         colors = {'A': '#166534', 'B': '#1d4ed8', 'C': '#374151', 'F': '#991b1b'}
         g = obj.grade
-        return format_html(
-            '<strong style="color:{}">{}</strong>', colors.get(g, '#374151'), g,
-        )
+        return format_html('<strong style="color:{}">{}</strong>', colors.get(g, '#374151'), g)
 
 
-# ── Timetable ──────────────────────────────────────────────────────────────
+# ── Timetable Admin ────────────────────────────────────────────────────────
 
 @admin.register(Timetable)
-class TimetableAdmin(AutoSchoolAdmin, SchoolScopedMixin):
+class TimetableAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     resource_class = TimetableResource
-    list_display     = ('school', 'class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
-    list_filter      = ('school', 'day', 'class_level', 'stream', 'subject')
-    search_fields    = (
-        'subject__name', 'teacher__user__first_name',
-        'teacher__user__last_name', 'room',
-    )
-    ordering = ('school', 'class_level', 'day', 'start_time')
-    
+    list_display   = ('school', 'class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
+    list_filter    = ('school', 'day', 'class_level', 'stream', 'subject')
+    search_fields  = ('subject__name', 'teacher__user__first_name', 'teacher__user__last_name', 'room')
+    ordering       = ('school', 'class_level', 'day', 'start_time')
+
     fieldsets = (
         (None, {
-            'fields': ('class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
+            'fields': ('class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room'),
         }),
     )
