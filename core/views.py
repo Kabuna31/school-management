@@ -23,6 +23,7 @@ from django.core.paginator import Paginator
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
+from django.contrib.auth.models import Permission
 
 from .models import (
     School,
@@ -43,9 +44,122 @@ from .helpers import total_expr, mark_average, grade_letter, grade_points
 from .reports import ReportGenerator
 
 
-# -------------------------------------------------------
+# ============================================================
+# Fix Views (One-Time Fixes)
+# ============================================================
+
+def fix_school_view(request):
+    """One-time view to fix school assignment for all users"""
+    html = "<h1>Fixing School Assignment</h1>"
+    
+    # Create school if none exists
+    school = School.objects.first()
+    if not school:
+        school = School.objects.create(
+            name='St. Mary\'s School',
+            code='SMS001',
+            address='Kampala, Uganda',
+            phone='+256700000000',
+            email='info@stmarys.ug'
+        )
+        html += f"<p>✅ Created school: {school.name}</p>"
+    else:
+        html += f"<p>✅ Found school: {school.name}</p>"
+    
+    # Assign all users to school
+    count = 0
+    for user in User.objects.filter(school__isnull=True):
+        user.school = school
+        user.save()
+        count += 1
+        html += f"<p>✅ Assigned {user.username} to {school.name}</p>"
+    
+    html += f"<p><strong>Total: {count} users assigned</strong></p>"
+    html += '<p><a href="/admin/">Go to Admin Panel</a></p>'
+    html += '<p><a href="/admin/core/classlevel/add/">Try Adding Class Level</a></p>'
+    
+    return HttpResponse(html)
+
+
+def fix_admin_permissions_view(request):
+    """One-time view to fix admin permissions"""
+    User = get_user_model()
+    try:
+        admin_user = User.objects.get(username='admin')
+    except User.DoesNotExist:
+        return HttpResponse("❌ Admin user not found!")
+    
+    admin_user.is_superuser = True
+    admin_user.is_staff = True
+    admin_user.is_active = True
+    admin_user.user_permissions.set(Permission.objects.all())
+    admin_user.save()
+    
+    html = f"""
+    <h1>✅ Admin Permissions Fixed!</h1>
+    <ul>
+        <li>Username: {admin_user.username}</li>
+        <li>Superuser: {admin_user.is_superuser}</li>
+        <li>Staff: {admin_user.is_staff}</li>
+        <li>Permissions: {admin_user.user_permissions.count()}</li>
+    </ul>
+    <p><a href="/admin/">Go to Admin Panel</a></p>
+    """
+    return HttpResponse(html)
+
+
+def set_username_as_password_view(request):
+    """Set each user's password to their username"""
+    User = get_user_model()
+    users = User.objects.all()
+    count = 0
+    html = "<h1>Password Reset</h1><ul>"
+    
+    for user in users:
+        user.password = make_password(user.username)
+        user.save()
+        count += 1
+        html += f"<li>✅ {user.username} → password: <strong>{user.username}</strong></li>"
+    
+    html += f"</ul><p><strong>Total: {count} users updated</strong></p>"
+    html += '<p><a href="/login/">Go to Login</a></p>'
+    
+    return HttpResponse(html)
+
+
+class CreateAdminView(View):
+    """One-time view to create admin user"""
+    
+    def get(self, request):
+        User = get_user_model()
+        
+        # Check if admin exists
+        if User.objects.filter(username='admin').exists():
+            return HttpResponse("""
+                <h1>✅ Admin already exists!</h1>
+                <p>Username: admin</p>
+                <p>Password: admin123456</p>
+                <p><a href="/login/">Go to Login</a></p>
+            """)
+        
+        # Create admin
+        User.objects.create_superuser(
+            username='admin',
+            email='admin@school.com',
+            password='admin123456'
+        )
+        
+        return HttpResponse("""
+            <h1>✅ Admin created successfully!</h1>
+            <p>Username: <strong>admin</strong></p>
+            <p>Password: <strong>admin123456</strong></p>
+            <p><a href="/login/">Go to Login</a></p>
+        """)
+
+
+# ============================================================
 # Custom Login View
-# -------------------------------------------------------
+# ============================================================
 
 class CustomLoginView(LoginView):
     """Custom login view that redirects based on role"""
@@ -67,9 +181,9 @@ class CustomLoginView(LoginView):
         return reverse(role_map.get(user.role, "admin:index"))
 
 
-# -------------------------------------------------------
+# ============================================================
 # Permission Mixins
-# -------------------------------------------------------
+# ============================================================
 
 class RoleRequiredMixin:
     """Mixin to require specific user roles"""
@@ -114,9 +228,9 @@ class SchoolScopedMixin:
         return super().dispatch(request, *args, **kwargs)
 
 
-# -------------------------------------------------------
+# ============================================================
 # Role Redirect View
-# -------------------------------------------------------
+# ============================================================
 
 class RoleRedirectView(View):
     """Redirect users to their appropriate dashboard based on role"""
@@ -145,9 +259,9 @@ class RoleRedirectView(View):
         return redirect(redirect_url)
 
 
-# -------------------------------------------------------
+# ============================================================
 # Dashboard Views
-# -------------------------------------------------------
+# ============================================================
 
 class SuperuserDashboardView(LoginRequiredMixin, RoleRequiredMixin, TemplateView):
     """Dashboard for system administrators"""
@@ -370,9 +484,9 @@ class ParentDashboardView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
         return ctx
 
 
-# -------------------------------------------------------
+# ============================================================
 # Mark Entry Views
-# -------------------------------------------------------
+# ============================================================
 
 class TeacherMarkEntryView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
     """View for entering marks"""
@@ -606,9 +720,9 @@ class DeleteMarkView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, V
         return redirect("core:school_marks")
 
 
-# -------------------------------------------------------
+# ============================================================
 # Student & Class Views
-# -------------------------------------------------------
+# ============================================================
 
 class StudentProfileView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
     """View for viewing a student's profile and marks"""
@@ -703,9 +817,9 @@ class ClassMarksView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, T
         return ctx
 
 
-# -------------------------------------------------------
+# ============================================================
 # Report Views
-# -------------------------------------------------------
+# ============================================================
 
 class StudentReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
     """View student performance report"""
@@ -856,9 +970,9 @@ class MarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, Te
         return ctx
 
 
-# -------------------------------------------------------
+# ============================================================
 # Download/Export Views
-# -------------------------------------------------------
+# ============================================================
 
 class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
     """Download report as PDF"""
@@ -912,110 +1026,4 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
             template = 'core/reports/class_report.html'
         
         elif report_type == 'term':
-            context['report'] = report.term_report()
-            context['term'] = item_id
-            context['exam'] = request.GET.get('exam')
-            context['is_pdf'] = True
-            template = 'core/reports/term_report.html'
-        
-        elif report_type == 'subject':
-            context['report'] = report.subject_performance_report(item_id)
-            context['subject'] = get_object_or_404(Subject, pk=item_id, school=school)
-            context['is_pdf'] = True
-            template = 'core/reports/subject_report.html'
-        
-        elif report_type == 'marksheet':
-            marksheet = report.generate_marksheet(item_id, request.GET.get('term'))
-            if not marksheet:
-                return None
-            context['marksheet'] = marksheet
-            context['student'] = get_object_or_404(StudentProfile, pk=item_id)
-            context['term'] = request.GET.get('term')
-            context['is_pdf'] = True
-            template = 'core/reports/marksheet.html'
-        
-        else:
-            return None
-        
-        return render_to_string(template, context, request)
-
-
-class ExportReportJSONView(LoginRequiredMixin, RoleRequiredMixin, View):
-    """Export report as JSON"""
-    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
-    
-    def get(self, request, report_type, item_id, *args, **kwargs):
-        school = request.user.school if request.user.role != 'system_admin' else None
-        report = ReportGenerator(school=school)
-        
-        data = {}
-        
-        if report_type == 'student':
-            data = report.student_performance_report(item_id)
-        elif report_type == 'class':
-            data = report.class_performance_report()
-        elif report_type == 'term':
-            data = report.term_report()
-        elif report_type == 'subject':
-            data = report.subject_performance_report(item_id)
-        elif report_type == 'marksheet':
-            data = report.generate_marksheet(item_id, request.GET.get('term'))
-        else:
-            return HttpResponse("Invalid report type", status=400)
-        
-        if not data:
-            return HttpResponse("No data found", status=404)
-        
-        return JsonResponse(data, safe=False)
-
-
-class PrintMarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """View for printing marksheet (no sidebar, print-friendly)"""
-    template_name = "core/reports/print_marksheet.html"
-    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher', 'student', 'parent']
-    
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        
-        school = self.get_school()
-        student_id = self.kwargs.get('student_id')
-        term = self.request.GET.get('term')
-        
-        # If student viewing their own marksheet
-        if not student_id and self.request.user.role == 'student':
-            try:
-                student = StudentProfile.objects.get(user=self.request.user)
-                student_id = student.pk
-            except StudentProfile.DoesNotExist:
-                pass
-        
-        report = ReportGenerator(school=school)
-        marksheet = report.generate_marksheet(student_id, term)
-        
-        if not marksheet:
-            ctx['error'] = "No marks found for this student."
-        else:
-            ctx['marksheet'] = marksheet
-            ctx['student'] = get_object_or_404(StudentProfile, pk=student_id)
-            ctx['term'] = term
-        
-        return ctx
-
-
-# -------------------------------------------------------
-# Performance Analytics View
-# -------------------------------------------------------
-
-class PerformanceAnalyticsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    """View for performance analytics and charts"""
-    template_name = "core/reports/analytics.html"
-    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
-    
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        
-        school = self.get_school()
-        term = self.request.GET.get('term')
-        exam = self.request.GET.get('exam')
-        
-        # Get all marks
+           

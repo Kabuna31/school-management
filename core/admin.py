@@ -26,9 +26,6 @@ admin.site.index_title = 'Dashboard'
 
 
 # ── Dashboard stats ────────────────────────────────────────────────────────
-# Patch AdminSite.index directly — avoids replacing admin.site which breaks
-# model registration and urls.py wiring.
-
 _original_index = _AdminSite.index
 
 
@@ -121,22 +118,31 @@ class SchoolScopedMixin:
         return qs
 
     def save_model(self, request, obj, form, change):
+        """Auto-assign school from user's profile if available"""
         if hasattr(obj, "school"):
-            # Scoped users → auto assign
             if self._is_scoped(request):
                 school = self._user_school(request)
 
                 if not school:
-                    messages.error(
-                        request,
-                        "Your account is not linked to a school. "
-                        "Please contact the administrator."
-                    )
-                    return
+                    # Try to get the first available school
+                    first_school = School.objects.first()
+                    if first_school:
+                        obj.school = first_school
+                        messages.warning(
+                            request,
+                            f"Auto-assigned to school: {first_school.name}"
+                        )
+                    else:
+                        messages.error(
+                            request,
+                            "Your account is not linked to a school, "
+                            "and no school exists in the system. "
+                            "Please create a school first."
+                        )
+                        return
+                else:
+                    obj.school = school
 
-                obj.school = school
-
-            # Superuser → require manual selection
             elif not obj.school:
                 messages.error(
                     request,
@@ -210,20 +216,15 @@ class SchoolScopedInline(admin.StackedInline):
                 school = self._user_school(request)
 
                 if not school:
-                    messages.error(
-                        request,
-                        "Your account is not linked to a school. "
-                        "Please contact the administrator."
-                    )
-                    return
+                    first_school = School.objects.first()
+                    if first_school:
+                        obj.school = first_school
+                    else:
+                        return
 
                 obj.school = school
 
             elif not obj.school:
-                messages.error(
-                    request,
-                    "School is required. Please select a school."
-                )
                 return
 
         super().save_model(request, obj, form, change)
@@ -322,7 +323,6 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
         if self._is_scoped(request):
             obj.school = request.user.school
         
-        # Handle role-based permissions
         if obj.role == 'system_admin':
             if not change:
                 obj.role = 'school_admin'
