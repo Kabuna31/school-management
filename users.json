@@ -1,0 +1,182 @@
+[
+{
+  "model": "core.user",
+  "pk": 2,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$5iIZDO2O46MwJMg1YQpihz$0gGbrM8txIwEu5LJKxwcRqnJvmLubipUtBmqPC3AQEY=",
+    "last_login": "2026-06-21T04:02:10Z",
+    "is_superuser": true,
+    "username": "mwanika",
+    "first_name": "Mwanika",
+    "last_name": "Richard",
+    "email": "",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-06-20T22:57:17Z",
+    "school": 2,
+    "role": "dos",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "core.user",
+  "pk": 3,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$Kl19afHOEUEpiEUJuNsjmI$B96d9G9HPQNX5B1RdqiVNG49UWQl4C/CXtAjl4NINrw=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "ikoona",
+    "first_name": "Ikoona",
+    "last_name": "Daniel",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-21T04:13:26Z",
+    "school": 2,
+    "role": "teacher",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "core.user",
+  "pk": 4,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$4BVVEyffKsKOoX0TaH9KCC$7UADAnIe0ykite8F8pUCuurM6pK0kUsLLORWpaiINIQ=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "kasadha",
+    "first_name": "Kasadha",
+    "last_name": "Paul",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-21T04:13:26Z",
+    "school": 2,
+    "role": "headteacher",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "core.user",
+  "pk": 5,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$vHci2ifQdMdtnTeS2E5kTK$MTFL76F/fr5z9zgr2hOD2Oti8PYD54SRFYyuO58jvsA=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "gloria",
+    "first_name": "Nangobi",
+    "last_name": "Gloria",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-21T04:13:26Z",
+    "school": 2,
+    "role": "student",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "core.user",
+  "pk": 6,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$H1RriZuP872QQjyQweyUiO$ypEch+xQFQ5RMcJVXBUvUJVd/daqqmRICyA1wEjWg18=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "isaac",
+    "first_name": "Kyeune",
+    "last_name": "Isaac",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-21T04:13:26Z",
+    "school": 2,
+    "role": "school_admin",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "core.user",
+  "pk": 7,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$Torqy3R5pH5hD5fXMxf8xw$VO3rjb1O6JVYTenaVqhn0cpFM7w7WOEeQQkWonJm7/E=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "tabingwa",
+    "first_name": "Tabingwa",
+    "last_name": "Aidah",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-21T04:13:26Z",
+    "school": 2,
+    "role": "student",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "core.user",
+  "pk": 8,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$OVI9wZMDatnozSQsHjlIlj$l18GplNeyDxc4zWC8mZtFufm8cdk1AlY+hCJ3Y/TQ9w=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "ngobi",
+    "first_name": "Ngobi",
+    "last_name": "Dan",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-21T04:13:26Z",
+    "school": 2,
+    "role": "teacher",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "core.user",
+  "pk": 9,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$a6h9UFCqkv37mi5zMsQFW4$4C2FlYMyZNci1hFCDZs/ezrSOvFlp3bgVbN2nkIu2bg=",
+    "last_login": null,
+    "is_superuser": false,
+    "username": "nangobi",
+    "first_name": "Nangobi",
+    "last_name": "Janet",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-21T04:13:26Z",
+    "school": 2,
+    "role": "student",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "core.user",
+  "pk": 10,
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$a3mE47lUZoRAn7m6QSwtHb$zUllVLVpxtE2H00vxylteG7TgscnTaz1Gv9LPCjaCjM=",
+    "last_login": "2026-06-21T04:25:22.465Z",
+    "is_superuser": false,
+    "username": "Admin",
+    "first_name": "",
+    "last_name": "",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-06-21T04:20:55.696Z",
+    "school": null,
+    "role": "system_admin",
+    "groups": [],
+    "user_permissions": []
+  }
+}
+]
