@@ -21,6 +21,8 @@ from django.contrib.auth.views import LoginView
 from django.template.loader import render_to_string
 from django.core.paginator import Paginator
 from django.contrib import messages
+from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import make_password
 
 from .models import (
     School,
@@ -991,11 +993,18 @@ class PrintMarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
         marksheet = report.generate_marksheet(student_id, term)
         
         if not marksheet:
-            ctx['error']
+            ctx['error'] = "No marks found for this student."
+        else:
+            ctx['marksheet'] = marksheet
+            ctx['student'] = get_object_or_404(StudentProfile, pk=student_id)
+            ctx['term'] = term
+        
+        return ctx
 
-# ============================================================
+
+# -------------------------------------------------------
 # Performance Analytics View
-# ============================================================
+# -------------------------------------------------------
 
 class PerformanceAnalyticsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
     """View for performance analytics and charts"""
@@ -1010,106 +1019,3 @@ class PerformanceAnalyticsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScop
         exam = self.request.GET.get('exam')
         
         # Get all marks
-        marks = Mark.objects.filter(school=school)
-        if term:
-            marks = marks.filter(term=term)
-        if exam:
-            marks = marks.filter(exam=exam)
-        
-        # Overall stats
-        total_students = StudentProfile.objects.filter(school=school).count()
-        total_marks = marks.count()
-        avg_score = mark_average(marks)
-        
-        # Grade distribution
-        grade_dist = {}
-        for grade in ['A', 'B', 'C', 'D', 'F']:
-            # Count marks with this grade
-            grade_marks = [m for m in marks if m.grade == grade]
-            count = len(grade_marks)
-            if count > 0:
-                grade_dist[grade] = {
-                    'count': count,
-                    'percentage': (count / total_marks * 100) if total_marks > 0 else 0
-                }
-        
-        # Subject performance
-        subject_performance = []
-        subjects = Subject.objects.filter(school=school)
-        for subject in subjects:
-            subject_marks = marks.filter(subject=subject)
-            if subject_marks.exists():
-                subject_performance.append({
-                    'name': subject.name,
-                    'average': mark_average(subject_marks),
-                    'count': subject_marks.count(),
-                    'highest': subject_marks.annotate(total=total_expr()).order_by('-total').first(),
-                    'lowest': subject_marks.annotate(total=total_expr()).order_by('total').first(),
-                })
-        
-        # Class performance
-        class_performance = []
-        classes = ClassLevel.objects.filter(school=school)
-        for class_level in classes:
-            class_students = StudentProfile.objects.filter(school=school, class_level=class_level)
-            class_marks = marks.filter(student__in=class_students)
-            if class_marks.exists():
-                class_performance.append({
-                    'name': class_level.name,
-                    'average': mark_average(class_marks),
-                    'count': class_marks.count(),
-                    'students': class_students.count(),
-                })
-        
-        # Top performers
-        top_performers = []
-        students = StudentProfile.objects.filter(school=school)
-        for student in students:
-            student_marks = marks.filter(student=student)
-            if student_marks.exists():
-                avg = mark_average(student_marks)
-                if avg > 0:
-                    top_performers.append({
-                        'student': student,
-                        'average': avg,
-                        'points': sum(m.grade_points for m in student_marks),
-                        'marks': student_marks.count(),
-                    })
-        top_performers = sorted(top_performers, key=lambda x: x['average'], reverse=True)[:10]
-        
-        ctx['marks'] = marks
-        ctx['total_marks'] = total_marks
-        ctx['total_students'] = total_students
-        ctx['avg_score'] = avg_score
-        ctx['grade_distribution'] = grade_dist
-        ctx['subject_performance'] = subject_performance
-        ctx['class_performance'] = class_performance
-        ctx['top_performers'] = top_performers
-        ctx['terms'] = [t[0] for t in TERM_CHOICES]
-        ctx['exams'] = [e[0] for e in EXAM_CHOICES]
-        ctx['selected_term'] = term
-        ctx['selected_exam'] = exam
-        
-        return ctx
-
-from django.http import HttpResponse
-from django.contrib.auth import get_user_model
-from django.contrib.auth.hashers import make_password
-
-def set_username_as_password_view(request):
-    """Set each user's password to their username"""
-    User = get_user_model()
-    users = User.objects.all()
-    count = 0
-    html = "<h1>Password Reset</h1><ul>"
-    
-    for user in users:
-        user.password = make_password(user.username)
-        user.save()
-        count += 1
-        html += f"<li>✅ {user.username} → password: <strong>{user.username}</strong></li>"
-    
-    html += f"</ul><p><strong>Total: {count} users updated</strong></p>"
-    html += '<p><a href="/login/">Go to Login</a></p>'
-    
-    return HttpResponse(html)

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.contrib.admin import AdminSite
+from django.contrib.admin import AdminSite as _AdminSite
 from import_export.admin import ImportExportModelAdmin
 from django.utils.html import format_html
 from django.urls import reverse
@@ -16,6 +16,52 @@ from .resources import (
     StudentProfileResource, SubjectResource, MarkResource,
     TimetableResource,
 )
+
+
+# ── Branding ───────────────────────────────────────────────────────────────
+admin.site.site_header = '🏫 SchoolMS Administration'
+admin.site.site_title  = 'SchoolMS Admin'
+admin.site.index_title = 'Dashboard'
+
+
+# ── Dashboard stats ────────────────────────────────────────────────────────
+# Patch AdminSite.index directly — avoids replacing admin.site which breaks
+# model registration and urls.py wiring.
+
+_original_index = _AdminSite.index
+
+
+def _patched_index(self, request, extra_context=None):
+    extra_context = extra_context or {}
+    school = getattr(request.user, 'school', None)
+    is_scoped = (
+        not request.user.is_superuser
+        and getattr(request.user, 'role', None) in SCOPED_ROLES
+        and school
+    )
+
+    mark_qs    = Mark.objects.filter(school=school)            if is_scoped else Mark.objects.all()
+    student_qs = StudentProfile.objects.filter(school=school)  if is_scoped else StudentProfile.objects.all()
+    staff_qs   = EmployeeProfile.objects.filter(school=school) if is_scoped else EmployeeProfile.objects.all()
+    subject_qs = Subject.objects.filter(school=school)         if is_scoped else Subject.objects.all()
+    school_qs  = School.objects.filter(pk=school.pk)           if is_scoped else School.objects.all()
+
+    avg = mark_qs.annotate(
+        total=ExpressionWrapper(F('mid_term') + F('end_term'), output_field=FloatField())
+    ).aggregate(a=Avg('total'))['a']
+
+    extra_context.update({
+        'school_count':  school_qs.count(),
+        'student_count': student_qs.count(),
+        'staff_count':   staff_qs.count(),
+        'subject_count': subject_qs.count(),
+        'mark_count':    mark_qs.count(),
+        'avg_score':     f"{avg:.1f}" if avg is not None else '—',
+    })
+    return _original_index(self, request, extra_context)
+
+
+_AdminSite.index = _patched_index
 
 
 # ── Role badge colours ─────────────────────────────────────────────────────
@@ -34,46 +80,6 @@ ROLE_COLORS = {
     'parent':         '#374151',
     'student':        '#374151',
 }
-
-
-# ── Custom AdminSite ───────────────────────────────────────────────────────
-
-class SchoolMSAdminSite(AdminSite):
-    site_header = '🏫 SchoolMS Administration'
-    site_title  = 'SchoolMS Admin'
-    index_title = 'Dashboard'
-
-    def index(self, request, extra_context=None):
-        extra_context = extra_context or {}
-        school = getattr(request.user, 'school', None)
-        is_scoped = (
-            not request.user.is_superuser
-            and getattr(request.user, 'role', None) in SCOPED_ROLES
-            and school
-        )
-
-        mark_qs    = Mark.objects.filter(school=school)            if is_scoped else Mark.objects.all()
-        student_qs = StudentProfile.objects.filter(school=school)  if is_scoped else StudentProfile.objects.all()
-        staff_qs   = EmployeeProfile.objects.filter(school=school) if is_scoped else EmployeeProfile.objects.all()
-        subject_qs = Subject.objects.filter(school=school)         if is_scoped else Subject.objects.all()
-        school_qs  = School.objects.filter(pk=school.pk)           if is_scoped else School.objects.all()
-
-        avg = mark_qs.annotate(
-            total=ExpressionWrapper(F('mid_term') + F('end_term'), output_field=FloatField())
-        ).aggregate(a=Avg('total'))['a']
-
-        extra_context.update({
-            'school_count':  school_qs.count(),
-            'student_count': student_qs.count(),
-            'staff_count':   staff_qs.count(),
-            'subject_count': subject_qs.count(),
-            'mark_count':    mark_qs.count(),
-            'avg_score':     f"{avg:.1f}" if avg is not None else '—',
-        })
-        return super().index(request, extra_context)
-
-
-admin.site = SchoolMSAdminSite(name='admin')
 
 
 # ── Scoping mixin ──────────────────────────────────────────────────────────
@@ -254,7 +260,6 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
         }),
     )
 
-    # Bypass mixin's get_fields/get_readonly_fields — UserAdmin owns 'school'
     def get_fields(self, request, obj=None):
         return super(SchoolScopedMixin, self).get_fields(request, obj)
 
