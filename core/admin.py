@@ -85,19 +85,24 @@ ROLE_COLORS = {
 class AutoSchoolAdmin(ImportExportModelAdmin):
     """
     Base admin class that auto-assigns school for all models.
-    This is the cleanest fix - no need to override save_model in every admin.
+    Forces school assignment for ClassLevel, Stream, Subject, etc.
     """
     
     def save_model(self, request, obj, form, change):
-        """Auto-assign school from user's profile"""
-        if hasattr(obj, "school") and not obj.school_id:
+        """Force auto-assign school from user's profile"""
+        if hasattr(obj, "school"):
+            # Always set school for scoped users
             if request.user.school:
                 obj.school = request.user.school
+                # Force set the school_id directly
+                obj.school_id = request.user.school.id
             else:
+                # Fallback to first school
                 from .models import School
                 first_school = School.objects.first()
                 if first_school:
                     obj.school = first_school
+                    obj.school_id = first_school.id
                 else:
                     messages.error(request, "No school exists. Please create one first.")
                     return
@@ -142,7 +147,6 @@ class SchoolScopedMixin:
 
         return qs
 
-    # ✅ ONE get_fields method (not duplicate)
     def get_fields(self, request, obj=None):
         """Remove school field from forms for scoped users, except for UserAdmin"""
         fields = list(super().get_fields(request, obj))
@@ -240,6 +244,24 @@ class SchoolScopedMixin:
         
         return queryset, use_distinct
 
+    def save_model(self, request, obj, form, change):
+        """Auto-assign school from user's profile (fallback)"""
+        if hasattr(obj, "school"):
+            if request.user.school:
+                obj.school = request.user.school
+                obj.school_id = request.user.school.id
+            else:
+                from .models import School
+                first_school = School.objects.first()
+                if first_school:
+                    obj.school = first_school
+                    obj.school_id = first_school.id
+                else:
+                    messages.error(request, "No school exists. Please create one first.")
+                    return
+        
+        super().save_model(request, obj, form, change)
+
 
 # ── Scoped inline base ─────────────────────────────────────────────────────
 
@@ -297,6 +319,23 @@ class SchoolScopedInline(admin.StackedInline):
                 kwargs['queryset'] = mapping[db_field.related_model]
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        """Auto-assign school for inline forms"""
+        if hasattr(obj, "school"):
+            if request.user.school:
+                obj.school = request.user.school
+                obj.school_id = request.user.school.id
+            else:
+                from .models import School
+                first_school = School.objects.first()
+                if first_school:
+                    obj.school = first_school
+                    obj.school_id = first_school.id
+                else:
+                    return
+
+        super().save_model(request, obj, form, change)
 
 
 # ── Inlines ────────────────────────────────────────────────────────────────
@@ -376,6 +415,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
     def save_model(self, request, obj, form, change):
         if self._is_scoped(request):
             obj.school = request.user.school
+            obj.school_id = request.user.school.id
         
         # Prevent scoped users from creating system_admin
         if self._is_scoped(request) and obj.role == 'system_admin':
