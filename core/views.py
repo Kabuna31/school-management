@@ -693,6 +693,7 @@ class ClassMarksView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, T
         ctx["terms"] = [t[0] for t in TERM_CHOICES]
         return ctx
 
+
 # ============================================================
 # Report Views
 # ============================================================
@@ -741,7 +742,7 @@ class ClassReportView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, 
         term = self.request.GET.get('term')
         exam = self.request.GET.get('exam')
         
-        # ✅ FIXED: Use 'class_level' instead of 'class_level_id'
+        # ✅ FIXED: Use 'class_level' (not 'class_level_id')
         report = ReportGenerator(
             school=school,
             class_level=class_id if class_id else None,
