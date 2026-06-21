@@ -105,12 +105,13 @@ class AutoSchoolAdmin(ImportExportModelAdmin):
         super().save_model(request, obj, form, change)
 
 
-# ── Scoped mixin (Filters data, not saves) ──────────────────────────────
+# ── Scoped mixin (Filters data and restricts dropdowns) ──────────────────
 
 class SchoolScopedMixin:
     """
     Restrict records to user's school.
     Auto-assignment is now handled by AutoSchoolAdmin.
+    Dropdowns ONLY show data from user's school.
     """
 
     school_field = "school"
@@ -126,6 +127,7 @@ class SchoolScopedMixin:
         return getattr(request.user, "school", None)
 
     def get_queryset(self, request):
+        """Restrict list views to user's school"""
         qs = super().get_queryset(request)
 
         if self._is_scoped(request):
@@ -141,6 +143,7 @@ class SchoolScopedMixin:
         return qs
 
     def get_fields(self, request, obj=None):
+        """Remove school field from forms for scoped users"""
         fields = list(super().get_fields(request, obj))
 
         if self._is_scoped(request) and "school" in fields:
@@ -149,6 +152,7 @@ class SchoolScopedMixin:
         return fields
 
     def get_readonly_fields(self, request, obj=None):
+        """Make school readonly for scoped users"""
         readonly = list(super().get_readonly_fields(request, obj))
         
         if self._is_scoped(request) and obj and "school" not in readonly:
@@ -157,6 +161,7 @@ class SchoolScopedMixin:
         return readonly
 
     def get_list_filter(self, request):
+        """Remove school from list filters for scoped users"""
         filters = list(super().get_list_filter(request))
         
         if self._is_scoped(request) and "school" in filters:
@@ -165,9 +170,14 @@ class SchoolScopedMixin:
         return filters
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """
+        RESTRICT DROPDOWN CHOICES TO USER'S SCHOOL ONLY!
+        This is the most important method for dropdown restrictions.
+        """
         school = self._user_school(request)
 
         if self._is_scoped(request) and school:
+            # Map models to their school filter
             mapping = {
                 School:          School.objects.filter(pk=school.pk),
                 User:            User.objects.filter(school=school),
@@ -176,21 +186,34 @@ class SchoolScopedMixin:
                 ClassLevel:      ClassLevel.objects.filter(school=school),
                 Stream:          Stream.objects.filter(school=school),
                 Subject:         Subject.objects.filter(school=school),
+                Mark:            Mark.objects.filter(school=school),
+                Timetable:       Timetable.objects.filter(school=school),
+                ParentProfile:   ParentProfile.objects.filter(school=school),
             }
+            
+            # Check if the field's model is in our mapping
             if db_field.related_model in mapping:
                 kwargs['queryset'] = mapping[db_field.related_model]
+            elif hasattr(db_field.related_model, 'school'):
+                # For any model with a school field, filter by school
+                kwargs['queryset'] = db_field.related_model.objects.filter(school=school)
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
+        """Restrict many-to-many choices to user's school"""
         school = self._user_school(request)
         
-        if self._is_scoped(request) and school and db_field.related_model == ParentProfile:
-            kwargs['queryset'] = ParentProfile.objects.filter(school=school)
+        if self._is_scoped(request) and school:
+            if db_field.related_model == ParentProfile:
+                kwargs['queryset'] = ParentProfile.objects.filter(school=school)
+            elif hasattr(db_field.related_model, 'school'):
+                kwargs['queryset'] = db_field.related_model.objects.filter(school=school)
         
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def get_search_results(self, request, queryset, search_term):
+        """Restrict search results to user's school"""
         queryset, use_distinct = super().get_search_results(request, queryset, search_term)
         
         if self._is_scoped(request):
@@ -204,7 +227,7 @@ class SchoolScopedMixin:
 # ── Scoped inline base ─────────────────────────────────────────────────────
 
 class SchoolScopedInline(admin.StackedInline):
-    """Inline version of SchoolScopedMixin"""
+    """Inline version of SchoolScopedMixin with dropdown restrictions"""
 
     def _is_scoped(self, request):
         return (
@@ -227,6 +250,7 @@ class SchoolScopedInline(admin.StackedInline):
         return qs
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Restrict dropdown choices to user's school in inlines"""
         school = self._user_school(request)
 
         if self._is_scoped(request) and school:
@@ -235,6 +259,8 @@ class SchoolScopedInline(admin.StackedInline):
                 Stream:          Stream.objects.filter(school=school),
                 Subject:         Subject.objects.filter(school=school),
                 EmployeeProfile: EmployeeProfile.objects.filter(school=school),
+                StudentProfile:  StudentProfile.objects.filter(school=school),
+                ParentProfile:   ParentProfile.objects.filter(school=school),
             }
             if db_field.related_model in mapping:
                 kwargs['queryset'] = mapping[db_field.related_model]
