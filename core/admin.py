@@ -79,9 +79,17 @@ ROLE_COLORS = {
     'student':        '#374151',
 }
 
-# ------------------------------AutoSchoolAllocation--------------------------
-class AutoSchoolModelAdmin(ImportExportModelAdmin):
+
+# ── Auto School Admin (Fixes the school assignment issue) ────────────────
+
+class AutoSchoolAdmin(ImportExportModelAdmin):
+    """
+    Base admin class that auto-assigns school for all models.
+    This is the cleanest fix - no need to override save_model in every admin.
+    """
+    
     def save_model(self, request, obj, form, change):
+        """Auto-assign school from user's profile"""
         if hasattr(obj, "school") and not obj.school_id:
             if request.user.school:
                 obj.school = request.user.school
@@ -90,22 +98,19 @@ class AutoSchoolModelAdmin(ImportExportModelAdmin):
                 first_school = School.objects.first()
                 if first_school:
                     obj.school = first_school
+                else:
+                    messages.error(request, "No school exists. Please create one first.")
+                    return
         
         super().save_model(request, obj, form, change)
 
-# Then all admin classes inherit from AutoSchoolModelAdmin instead of ImportExportModelAdmin
-@admin.register(Subject)
-class SubjectAdmin(AutoSchoolModelAdmin):
-    
-# ── Scoped mixin ──────────────────────────────────────────────────────────
+
+# ── Scoped mixin (Filters data, not saves) ──────────────────────────────
 
 class SchoolScopedMixin:
     """
-    Restrict records to user's school and automatically
-    assign school during save.
-
-    Superusers can access everything.
-    School admins only see their own school's data.
+    Restrict records to user's school.
+    Auto-assignment is now handled by AutoSchoolAdmin.
     """
 
     school_field = "school"
@@ -134,30 +139,6 @@ class SchoolScopedMixin:
                 qs = qs.none()
 
         return qs
-
-    def save_model(self, request, obj, form, change):
-        """Auto-assign school from user's profile"""
-        if hasattr(obj, "school"):
-            # For scoped users, auto-assign from user
-            if self._is_scoped(request):
-                school = self._user_school(request)
-                if school:
-                    obj.school = school
-                else:
-                    messages.error(request, "You are not associated with a school.")
-                    return
-            else:
-                # For superusers, if no school is selected, use first school
-                if not obj.school_id:
-                    from .models import School
-                    school = School.objects.first()
-                    if school:
-                        obj.school = school
-                    else:
-                        messages.error(request, "No school exists. Please create one first.")
-                        return
-
-        super().save_model(request, obj, form, change)
 
     def get_fields(self, request, obj=None):
         fields = list(super().get_fields(request, obj))
@@ -244,18 +225,6 @@ class SchoolScopedInline(admin.StackedInline):
                 qs = qs.filter(school=school)
 
         return qs
-
-    def save_model(self, request, obj, form, change):
-        if hasattr(obj, "school"):
-            if self._is_scoped(request):
-                school = self._user_school(request)
-                if school:
-                    obj.school = school
-                else:
-                    messages.error(request, "You are not associated with a school.")
-                    return
-
-        super().save_model(request, obj, form, change)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         school = self._user_school(request)
@@ -351,7 +320,6 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
         if self._is_scoped(request):
             obj.school = request.user.school
         
-        # Fix role handling
         if obj.role == 'system_admin':
             obj.is_superuser = True
             obj.is_staff = True
@@ -391,7 +359,7 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
 # ── Stream ─────────────────────────────────────────────────────────────────
 
 @admin.register(Stream)
-class StreamAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+class StreamAdmin(AutoSchoolAdmin, SchoolScopedMixin):
     resource_class = StreamResource
     list_display = ('name', 'school', 'student_count')
     list_filter = ('school',)
@@ -405,7 +373,7 @@ class StreamAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 # ── ClassLevel ─────────────────────────────────────────────────────────────
 
 @admin.register(ClassLevel)
-class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+class ClassLevelAdmin(AutoSchoolAdmin, SchoolScopedMixin):
     resource_class = ClassLevelResource
     list_display = ('name', 'school', 'class_teacher', 'student_count')
     list_filter = ('school',)
@@ -420,7 +388,7 @@ class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 # ── Subject ────────────────────────────────────────────────────────────────
 
 @admin.register(Subject)
-class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+class SubjectAdmin(AutoSchoolAdmin, SchoolScopedMixin):
     resource_class = SubjectResource
     list_display = ('name', 'code', 'school', 'avg_total')
     list_filter = ('school',)
@@ -443,7 +411,7 @@ class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 # ── EmployeeProfile ────────────────────────────────────────────────────────
 
 @admin.register(EmployeeProfile)
-class EmployeeProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+class EmployeeProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
     resource_class = EmployeeProfileResource
     list_display     = ('full_name', 'role_badge', 'school', 'staff_id', 'hire_date')
     list_filter      = ('school', 'user__role')
@@ -467,7 +435,7 @@ class EmployeeProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 # ── ParentProfile ──────────────────────────────────────────────────────────
 
 @admin.register(ParentProfile)
-class ParentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+class ParentProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
     resource_class = ParentProfileResource
     list_display     = ('full_name', 'school', 'phone_number', 'children_count')
     list_filter      = ('school',)
@@ -485,7 +453,7 @@ class ParentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 # ── StudentProfile ─────────────────────────────────────────────────────────
 
 @admin.register(StudentProfile)
-class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+class StudentProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
     resource_class = StudentProfileResource
     list_display = (
         'full_name', 'admission_number', 'school',
@@ -542,7 +510,7 @@ class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 # ── Mark ───────────────────────────────────────────────────────────────────
 
 @admin.register(Mark)
-class MarkAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+class MarkAdmin(AutoSchoolAdmin, SchoolScopedMixin):
     resource_class = MarkResource
     list_display     = (
         'student_name', 'subject', 'term', 'exam',
@@ -582,7 +550,7 @@ class MarkAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 # ── Timetable ──────────────────────────────────────────────────────────────
 
 @admin.register(Timetable)
-class TimetableAdmin(SchoolScopedMixin, ImportExportModelAdmin):
+class TimetableAdmin(AutoSchoolAdmin, SchoolScopedMixin):
     resource_class = TimetableResource
     list_display     = ('school', 'class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
     list_filter      = ('school', 'day', 'class_level', 'stream', 'subject')
@@ -596,4 +564,4 @@ class TimetableAdmin(SchoolScopedMixin, ImportExportModelAdmin):
         (None, {
             'fields': ('class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
         }),
-    )
+    )s
