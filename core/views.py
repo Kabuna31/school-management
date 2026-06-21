@@ -824,28 +824,27 @@ class MarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, Te
         return ctx
 
 
-```python
 # ============================================================
 # Download / Export Views
 # ============================================================
 
-class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
+class DownloadReportPDFView(
+    LoginRequiredMixin,
+    RoleRequiredMixin,
+    SchoolScopedMixin,
+    View
+):
     required_roles = [
-        'system_admin',
-        'school_admin',
-        'headteacher',
-        'dos',
-        'teacher',
+        "system_admin",
+        "school_admin",
+        "headteacher",
+        "dos",
+        "teacher",
     ]
 
     def get(self, request, report_type, item_id, *args, **kwargs):
 
-        school = (
-            None
-            if request.user.is_superuser
-            or request.user.role == "system_admin"
-            else request.user.school
-        )
+        school = self.get_school()
 
         html = self._get_report_html(
             request=request,
@@ -890,8 +889,7 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
             response[
                 "Content-Disposition"
             ] = (
-                f'attachment; '
-                f'filename="{report_type}_{item_id}.pdf"'
+                f'attachment; filename="{report_type}_{item_id}.pdf"'
             )
 
             return response
@@ -906,8 +904,7 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
             response[
                 "Content-Disposition"
             ] = (
-                f'attachment; '
-                f'filename="{report_type}_{item_id}.html"'
+                f'attachment; filename="{report_type}_{item_id}.html"'
             )
 
             return response
@@ -920,7 +917,9 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
         school,
     ):
 
-        report = ReportGenerator(school=school)
+        report = ReportGenerator(
+            school=school
+        )
 
         context = {
             "is_pdf": True,
@@ -929,16 +928,14 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
         if report_type == "student":
 
             context.update({
-                "report":
-                    report.student_performance_report(
-                        item_id
-                    ),
+                "report": report.student_performance_report(
+                    item_id
+                ),
 
-                "student":
-                    get_object_or_404(
-                        StudentProfile,
-                        pk=item_id,
-                    ),
+                "student": get_object_or_404(
+                    StudentProfile,
+                    pk=item_id,
+                ),
             })
 
             template = (
@@ -947,22 +944,21 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
 
         elif report_type == "class":
 
-            context.update({
-                "report":
-                    report.class_performance_report(),
-            })
-
-            filters = {"pk": item_id}
+            filters = {
+                "pk": item_id
+            }
 
             if school:
                 filters["school"] = school
 
-            context["class_level"] = (
-                get_object_or_404(
+            context.update({
+                "report": report.class_performance_report(),
+
+                "class_level": get_object_or_404(
                     ClassLevel,
-                    **filters
-                )
-            )
+                    **filters,
+                ),
+            })
 
             template = (
                 "core/reports/class_report.html"
@@ -971,11 +967,8 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
         elif report_type == "term":
 
             context.update({
-                "report":
-                    report.term_report(),
-
-                "term":
-                    item_id,
+                "report": report.term_report(),
+                "term": item_id,
             })
 
             template = (
@@ -984,23 +977,22 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
 
         elif report_type == "subject":
 
-            context.update({
-                "report":
-                    report.subject_performance_report(
-                        item_id
-                    ),
+            subject_filters = {
+                "pk": item_id
+            }
 
-                "subject":
-                    get_object_or_404(
-                        Subject,
-                        pk=item_id,
-                        school=school
-                    )
-                    if school
-                    else get_object_or_404(
-                        Subject,
-                        pk=item_id
-                    ),
+            if school:
+                subject_filters["school"] = school
+
+            context.update({
+                "report": report.subject_performance_report(
+                    item_id
+                ),
+
+                "subject": get_object_or_404(
+                    Subject,
+                    **subject_filters,
+                ),
             })
 
             template = (
@@ -1011,8 +1003,7 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
             return None
 
         return render_to_string(
-            template,
+            template_name=template,
             context=context,
             request=request,
         )
-```
