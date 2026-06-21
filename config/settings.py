@@ -77,9 +77,17 @@ DATABASES = {
     "default": dj_database_url.config(
         default=os.getenv("DATABASE_URL", "sqlite:///db.sqlite3"),
         conn_max_age=600,
-        ssl_require=not DEBUG,
     )
 }
+
+# Only use SSL for PostgreSQL in production
+if not DEBUG:
+    database_url = os.getenv('DATABASE_URL', '')
+    if 'postgres' in database_url or 'postgresql' in database_url:
+        DATABASES['default']['OPTIONS'] = {'sslmode': 'require'}
+    else:
+        # SQLite doesn't support sslmode
+        DATABASES['default'].pop('OPTIONS', None)
 
 # ============================================================
 # Auth - Custom User Model
