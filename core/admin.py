@@ -87,7 +87,7 @@ ROLE_COLORS = {
 class SchoolScopedMixin:
     """
     Restrict queryset / FK choices / search to the user's school.
-    Uses SCOPED_ROLES from models — single source of truth.
+    Automatically assigns the user's school when saving.
     Superusers always see everything.
     """
 
@@ -140,23 +140,27 @@ class SchoolScopedMixin:
         return queryset, use_distinct
 
     def save_model(self, request, obj, form, change):
+        """Auto-assign school from user's profile"""
         if self._is_scoped(request) and hasattr(obj, 'school'):
             obj.school = request.user.school
         super().save_model(request, obj, form, change)
 
     def get_fields(self, request, obj=None):
+        """Remove school field from forms for scoped users (auto-assigned)"""
         fields = list(super().get_fields(request, obj))
         if self._is_scoped(request) and 'school' in fields:
             fields.remove('school')
         return fields
 
     def get_readonly_fields(self, request, obj=None):
+        """Make school readonly if it appears (for superusers)"""
         readonly = list(super().get_readonly_fields(request, obj))
         if self._is_scoped(request) and obj and 'school' not in readonly:
             readonly.append('school')
         return readonly
 
     def get_list_filter(self, request):
+        """Remove school from list filters for scoped users (already filtered)"""
         filters = list(super().get_list_filter(request))
         if self._is_scoped(request) and 'school' in filters:
             filters.remove('school')
@@ -197,6 +201,12 @@ class SchoolScopedInline(admin.StackedInline):
                 kwargs['queryset'] = mapping[db_field.related_model]
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    def save_model(self, request, obj, form, change):
+        """Auto-assign school from user's profile for inline forms"""
+        if self._is_scoped(request) and hasattr(obj, 'school'):
+            obj.school = request.user.school
+        super().save_model(request, obj, form, change)
+
 
 # ── Inlines ────────────────────────────────────────────────────────────────
 
@@ -206,7 +216,7 @@ class EmployeeProfileInline(SchoolScopedInline):
     verbose_name_plural = 'Employee Profile'
     fk_name             = 'user'
     extra               = 0
-    fields              = ('school', 'staff_id', 'hire_date')
+    fields              = ('staff_id', 'hire_date')
 
 
 class ParentProfileInline(SchoolScopedInline):
@@ -215,7 +225,7 @@ class ParentProfileInline(SchoolScopedInline):
     verbose_name_plural = 'Parent Profile'
     fk_name             = 'user'
     extra               = 0
-    fields              = ('school', 'phone_number')
+    fields              = ('phone_number',)
 
 
 class StudentProfileInline(SchoolScopedInline):
@@ -225,7 +235,7 @@ class StudentProfileInline(SchoolScopedInline):
     fk_name             = 'user'
     extra               = 0
     fields              = (
-        'school', 'admission_number', 'gender',
+        'admission_number', 'gender',
         'class_level', 'stream', 'passport_photo',
     )
 
@@ -320,22 +330,7 @@ class StreamAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     list_display = ('name', 'school', 'student_count')
     list_filter = ('school',)
     search_fields = ('name',)
-    
-    # Force school field in form
-    fields = ('name', 'school')
-    
-    def get_fields(self, request, obj=None):
-        """Ensure school field is always present"""
-        fields = list(super().get_fields(request, obj))
-        if 'school' not in fields:
-            fields.append('school')
-        return fields
-    
-    def save_model(self, request, obj, form, change):
-        """Set school from user if not provided"""
-        if not obj.school_id and request.user.school:
-            obj.school = request.user.school
-        super().save_model(request, obj, form, change)
+    # School is auto-assigned - no need to show in form
     
     @admin.display(description='Students')
     def student_count(self, obj):
@@ -352,22 +347,6 @@ class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     search_fields = ('name',)
     autocomplete_fields = ('class_teacher',)
     
-    # Force school field in form
-    fields = ('name', 'school', 'class_teacher')
-    
-    def get_fields(self, request, obj=None):
-        """Ensure school field is always present"""
-        fields = list(super().get_fields(request, obj))
-        if 'school' not in fields:
-            fields.append('school')
-        return fields
-    
-    def save_model(self, request, obj, form, change):
-        """Set school from user if not provided"""
-        if not obj.school_id and request.user.school:
-            obj.school = request.user.school
-        super().save_model(request, obj, form, change)
-    
     @admin.display(description='Students')
     def student_count(self, obj):
         return StudentProfile.objects.filter(class_level=obj).count()
@@ -382,22 +361,6 @@ class SubjectAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     list_filter = ('school',)
     search_fields = ('name', 'code')
     ordering = ('school', 'name')
-    
-    # Force school field in form
-    fields = ('name', 'code', 'school')
-    
-    def get_fields(self, request, obj=None):
-        """Ensure school field is always present"""
-        fields = list(super().get_fields(request, obj))
-        if 'school' not in fields:
-            fields.append('school')
-        return fields
-    
-    def save_model(self, request, obj, form, change):
-        """Set school from user if not provided"""
-        if not obj.school_id and request.user.school:
-            obj.school = request.user.school
-        super().save_model(request, obj, form, change)
     
     @admin.display(description='Avg Total')
     def avg_total(self, obj):
@@ -421,6 +384,7 @@ class EmployeeProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     list_filter      = ('school', 'user__role')
     search_fields    = ('user__username', 'user__first_name', 'user__last_name', 'staff_id')
     ordering         = ('school', 'staff_id')
+    # School is auto-assigned
 
     @admin.display(description='Name')
     def full_name(self, obj):
@@ -472,7 +436,7 @@ class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 
     fieldsets = (
         ('Personal', {
-            'fields': ('user', 'school', 'admission_number', 'gender', 'passport_photo', 'passport_preview'),
+            'fields': ('user', 'admission_number', 'gender', 'passport_photo', 'passport_preview'),
         }),
         ('Academic', {
             'fields': ('class_level', 'stream'),
@@ -481,12 +445,7 @@ class StudentProfileAdmin(SchoolScopedMixin, ImportExportModelAdmin):
             'fields': ('parent',),
         }),
     )
-    
-    def save_model(self, request, obj, form, change):
-        """Set school from user if not provided"""
-        if not obj.school_id and request.user.school:
-            obj.school = request.user.school
-        super().save_model(request, obj, form, change)
+    # School is auto-assigned - removed from fieldsets
 
     @admin.display(description='Name')
     def full_name(self, obj):
@@ -570,18 +529,9 @@ class TimetableAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     )
     ordering = ('school', 'class_level', 'day', 'start_time')
     
-    # Force school field in form
-    fields = ('school', 'class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
-    
-    def get_fields(self, request, obj=None):
-        """Ensure school field is always present"""
-        fields = list(super().get_fields(request, obj))
-        if 'school' not in fields:
-            fields.append('school')
-        return fields
-    
-    def save_model(self, request, obj, form, change):
-        """Set school from user if not provided"""
-        if not obj.school_id and request.user.school:
-            obj.school = request.user.school
-        super().save_model(request, obj, form, change)
+    fieldsets = (
+        (None, {
+            'fields': ('class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
+        }),
+    )
+    # School is auto-assigned - removed from fieldsets
