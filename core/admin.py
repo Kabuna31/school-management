@@ -336,15 +336,22 @@ class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
     search_fields = ('name',)
     autocomplete_fields = ('class_teacher',)
     
-    # IMPORTANT: Include school in the form fields
+    # Force school field in form
     fields = ('name', 'school', 'class_teacher')
     
-    # Alternative: Use fieldsets if you prefer
-    # fieldsets = (
-    #     (None, {
-    #         'fields': ('name', 'school', 'class_teacher')
-    #     }),
-    # )
+    def get_fields(self, request, obj=None):
+        """Ensure school field is always present"""
+        fields = list(super().get_fields(request, obj))
+        if 'school' not in fields:
+            fields.append('school')
+        return fields
+    
+    def save_model(self, request, obj, form, change):
+        """Set school from user if not provided"""
+        # If school is not set and user has a school, use it
+        if not obj.school_id and request.user.school:
+            obj.school = request.user.school
+        super().save_model(request, obj, form, change)
     
     @admin.display(description='Students')
     def student_count(self, obj):
