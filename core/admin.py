@@ -327,19 +327,15 @@ class StreamAdmin(SchoolScopedMixin, ImportExportModelAdmin):
 
 
 # ── ClassLevel ─────────────────────────────────────────────────────────────
-
 @admin.register(ClassLevel)
 class ClassLevelAdmin(SchoolScopedMixin, ImportExportModelAdmin):
-    resource_classes    = [ClassLevelResource]
-    list_display        = ('name', 'school', 'class_teacher', 'student_count')
-    list_filter         = ('school',)
-    search_fields       = ('name',)
+    resource_class = ClassLevelResource
+    list_display = ('name', 'school', 'class_teacher', 'student_count')
+    list_filter = ('school',)
+    search_fields = ('name',)
     autocomplete_fields = ('class_teacher',)
-
-    @admin.display(description='Students')
-    def student_count(self, obj):
-        return StudentProfile.objects.filter(class_level=obj).count()
-
+    # Make sure school is in the fields
+    fields = ('name', 'school', 'class_teacher')  # Add this line if missing
 
 # ── EmployeeProfile ────────────────────────────────────────────────────────
 
