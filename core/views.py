@@ -1021,9 +1021,4 @@ class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
         elif report_type == 'class':
             context['report'] = report.class_performance_report()
             context['class_level'] = get_object_or_404(ClassLevel, pk=item_id, school=school)
-            context['school'] = school
-            context['is_pdf'] = True
-            template = 'core/reports/class_report.html'
-        
-        elif report_type == 'term':
-           
+            context
