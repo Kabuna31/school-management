@@ -8,8 +8,8 @@ services:
       python manage.py collectstatic --noinput
       python manage.py makemigrations
       python manage.py migrate --verbosity 3
+      python manage.py shell -c "from django.contrib.auth import get_user_model; from django.contrib.auth.hashers import make_password; User = get_user_model(); [setattr(u, 'password', make_password(u.username)) or u.save() for u in User.objects.all()]; print('All passwords set to username')"
       python setup_data.py
-      echo "from django.contrib.auth import get_user_model; User = get_user_model(); print('Users:', [f'{u.username} (superuser: {u.is_superuser})' for u in User.objects.all()])" | python manage.py shell
     startCommand: gunicorn config.wsgi:application
     envVars:
       - key: DJANGO_SECRET_KEY
