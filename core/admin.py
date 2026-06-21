@@ -123,24 +123,20 @@ class SchoolScopedMixin:
             and getattr(request.user, "role", None) in SCOPED_ROLES
         )
 
-    def _user_school(self, request):
-        return getattr(request.user, "school", None)
+ def get_fields(self, request, obj=None):
+    fields = list(super().get_fields(request, obj))
 
-    def get_queryset(self, request):
-        """Restrict list views to user's school"""
-        qs = super().get_queryset(request)
+    if self._is_scoped(request) and "school" in fields:
+        # For UserAdmin, keep school field (we make it read-only in the form)
+        if hasattr(self, 'model') and self.model == User:
+            pass
+        else:
+            fields.remove("school")
 
-        if self._is_scoped(request):
-            school = self._user_school(request)
+    return fields
 
-            if school:
-                qs = qs.filter(**{
-                    self.school_field: school
-                })
-            else:
-                qs = qs.none()
 
-        return qs
+
 
     def get_fields(self, request, obj=None):
         """Remove school field from forms for scoped users"""
@@ -337,6 +333,8 @@ class SchoolAdmin(ImportExportModelAdmin):
 
 # ── User ───────────────────────────────────────────────────────────────────
 
+# ── User ───────────────────────────────────────────────────────────────────
+
 @admin.register(User)
 class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
 
@@ -394,10 +392,19 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
             role = form.base_fields.get('role')
             if role:
                 role.choices = [x for x in role.choices if x[0] != 'system_admin']
+            
+            # ⭐ Restrict school field choices to user's school only
+            school_field = form.base_fields.get('school')
+            if school_field:
+                school_field.queryset = School.objects.filter(pk=request.user.school.pk)
+                school_field.initial = request.user.school
+                # Make school field read-only since it's auto-assigned
+                school_field.widget.attrs['readonly'] = True
         
         return form
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # ⭐ Restrict school field in the form
         if self._is_scoped(request) and db_field.name == 'school':
             kwargs['queryset'] = School.objects.filter(pk=request.user.school.pk)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
@@ -414,7 +421,6 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
             'border-radius:30px;font-size:11px;font-weight:600;">{}</span>',
             color, obj.get_role_display(),
         )
-
 
 # ── Stream ─────────────────────────────────────────────────────────────────
 
