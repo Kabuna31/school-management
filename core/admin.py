@@ -591,4 +591,4 @@ class TimetableAdmin(SchoolScopedMixin, ImportExportModelAdmin):
         (None, {
             'fields': ('class_level', 'stream', 'subject', 'teacher', 'day', 'start_time', 'end_time', 'room')
         }),
-    )ss
+    )
