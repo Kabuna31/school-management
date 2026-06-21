@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Print Marksheet</title>
+
+<style>
+body{
+font-family:Arial;
+margin:20px;
+}
+
+@media print{
+button{
+display:none;
+}
+}
+</style>
+
+</head>
+
+<body>
+
+<button onclick="window.print()">
+Print
+</button>
+
+<h1>Student Marksheet</h1>
+
+{% if error %}
+<p>{{ error }}</p>
+
+{% else %}
+
+<h3>{{ student }}</h3>
+
+<table border="1" width="100%">
+
+<tr>
+<th>Subject</th>
+<th>Mark</th>
+<th>Grade</th>
+</tr>
+
+{% for row in marksheet %}
+
+<tr>
+<td>{{ row.subject }}</td>
+<td>{{ row.total }}</td>
+<td>{{ row.grade }}</td>
+</tr>
+
+{% endfor %}
+
+</table>
+
+{% endif %}
+
+</body>
+</html>

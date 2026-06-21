@@ -382,79 +382,67 @@ class SchoolAdmin(ImportExportModelAdmin):
 # ── User ───────────────────────────────────────────────────────────────────
 
 @admin.register(User)
-class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
+class UserAdmin(ImportExportModelAdmin, BaseUserAdmin):
 
     resource_class = UserResource
-    list_display     = ('username', 'full_name', 'role_badge', 'school', 'is_active', 'date_joined')
-    list_filter      = ('role', 'school', 'is_active')
-    search_fields    = ('username', 'email', 'first_name', 'last_name')
-    ordering         = ('-date_joined',)
+
+    list_display = (
+        'username',
+        'full_name',
+        'role_badge',
+        'is_active',
+        'date_joined',
+    )
+
+    list_filter = (
+        'role',
+        'is_active',
+    )
+
+    search_fields = (
+        'username',
+        'email',
+        'first_name',
+        'last_name',
+    )
+
+    ordering = ('-date_joined',)
 
     fieldsets = BaseUserAdmin.fieldsets + (
-        ('School & Role', {'fields': ('school', 'role')}),
-    )
-    add_fieldsets = (
-        (None, {
-            'classes': ('wide',),
-            'fields':  ('username', 'password1', 'password2', 'school', 'role'),
+        ('Role', {
+            'fields': ('role',)
         }),
     )
 
-    def get_fields(self, request, obj=None):
-        return super(SchoolScopedMixin, self).get_fields(request, obj)
-
-    def get_readonly_fields(self, request, obj=None):
-        return super(SchoolScopedMixin, self).get_readonly_fields(request, obj)
-
-    def get_queryset(self, request):
-        qs = super(ImportExportModelAdmin, self).get_queryset(request)
-        if self._is_scoped(request):
-            qs = qs.filter(school=request.user.school)
-        return qs
+    add_fieldsets = (
+        (
+            None,
+            {
+                'classes': ('wide',),
+                'fields': (
+                    'username',
+                    'password1',
+                    'password2',
+                    'role',
+                ),
+            },
+        ),
+    )
 
     def save_model(self, request, obj, form, change):
-        if self._is_scoped(request):
-            obj.school = request.user.school
-            obj.school_id = request.user.school.id
-        
-        # Prevent scoped users from creating system_admin
-        if self._is_scoped(request) and obj.role == 'system_admin':
-            messages.error(request, "You cannot create a System Admin user.")
-            return
-        
+
         if obj.role == 'system_admin':
             obj.is_superuser = True
             obj.is_staff = True
+            obj.school = None
+
         else:
-            obj.is_superuser = False
             obj.is_staff = True
-            
+
+            if not obj.school:
+                obj.school = request.user.school
+
         super().save_model(request, obj, form, change)
-
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        
-        # Hide system_admin role from scoped users
-        if self._is_scoped(request):
-            role = form.base_fields.get('role')
-            if role:
-                role.choices = [x for x in role.choices if x[0] != 'system_admin']
-            
-            # Restrict school field choices to user's school only
-            school_field = form.base_fields.get('school')
-            if school_field:
-                school_field.queryset = School.objects.filter(pk=request.user.school.pk)
-                school_field.initial = request.user.school
-                # Make school field read-only since it's auto-assigned
-                school_field.widget.attrs['readonly'] = True
-        
-        return form
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        # Restrict school field in the form
-        if self._is_scoped(request) and db_field.name == 'school':
-            kwargs['queryset'] = School.objects.filter(pk=request.user.school.pk)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description='Name')
     def full_name(self, obj):
@@ -463,13 +451,12 @@ class UserAdmin(ImportExportModelAdmin, SchoolScopedMixin, BaseUserAdmin):
     @admin.display(description='Role')
     def role_badge(self, obj):
         color = ROLE_COLORS.get(obj.role, '#374151')
+
         return format_html(
-            '<span style="background:{};color:white;padding:4px 10px;'
-            'border-radius:30px;font-size:11px;font-weight:600;">{}</span>',
-            color, obj.get_role_display(),
+            '<span style="background:{};color:white;padding:4px 10px;border-radius:30px;">{}</span>',
+            color,
+            obj.get_role_display()
         )
-
-
 # ── Stream ─────────────────────────────────────────────────────────────────
 
 @admin.register(Stream)
