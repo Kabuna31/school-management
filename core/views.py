@@ -824,48 +824,195 @@ class MarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, Te
         return ctx
 
 
+```python
 # ============================================================
-# Download/Export Views
+# Download / Export Views
 # ============================================================
 
 class DownloadReportPDFView(LoginRequiredMixin, RoleRequiredMixin, View):
-    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos', 'teacher']
-    
+    required_roles = [
+        'system_admin',
+        'school_admin',
+        'headteacher',
+        'dos',
+        'teacher',
+    ]
+
     def get(self, request, report_type, item_id, *args, **kwargs):
-        school = request.user.school if request.user.role != 'system_admin' else None
-        html_string = self._get_report_html(request, report_type, item_id, school)
-        
-        if not html_string:
-            return HttpResponse("Report not found", status=404)
-        
+
+        school = (
+            None
+            if request.user.is_superuser
+            or request.user.role == "system_admin"
+            else request.user.school
+        )
+
+        html = self._get_report_html(
+            request=request,
+            report_type=report_type,
+            item_id=item_id,
+            school=school,
+        )
+
+        if not html:
+            return HttpResponse(
+                "Report not found.",
+                status=404,
+            )
+
         try:
             from weasyprint import HTML, CSS
             from weasyprint.text.fonts import FontConfiguration
-            
+
             font_config = FontConfiguration()
-            html = HTML(string=html_string)
-            css = CSS(string='@page { size: A4; margin: 1cm; }')
-            pdf = html.write_pdf(font_config=font_config, stylesheets=[css])
-            
-            response = HttpResponse(pdf, content_type='application/pdf')
-            response['Content-Disposition'] = f'attachment; filename="{report_type}_report_{item_id}.pdf"'
+
+            pdf = HTML(
+                string=html
+            ).write_pdf(
+                stylesheets=[
+                    CSS(
+                        string="""
+                        @page {
+                            size: A4;
+                            margin: 1cm;
+                        }
+                        """
+                    )
+                ],
+                font_config=font_config,
+            )
+
+            response = HttpResponse(
+                pdf,
+                content_type="application/pdf",
+            )
+
+            response[
+                "Content-Disposition"
+            ] = (
+                f'attachment; '
+                f'filename="{report_type}_{item_id}.pdf"'
+            )
+
             return response
-            
+
         except ImportError:
-            response = HttpResponse(html_string, content_type='text/html')
-            response['Content-Disposition'] = f'attachment; filename="{report_type}_report_{item_id}.html"'
+
+            response = HttpResponse(
+                html,
+                content_type="text/html",
+            )
+
+            response[
+                "Content-Disposition"
+            ] = (
+                f'attachment; '
+                f'filename="{report_type}_{item_id}.html"'
+            )
+
             return response
-    
-    def _get_report_html(self, request, report_type, item_id, school):
-        context = {}
+
+    def _get_report_html(
+        self,
+        request,
+        report_type,
+        item_id,
+        school,
+    ):
+
         report = ReportGenerator(school=school)
-        
-        if report_type == 'student':
-            context['report'] = report.student_performance_report(item_id)
-            context['student'] = get_object_or_404(StudentProfile, pk=item_id)
-            context['is_pdf'] = True
-            template = 'core/reports/student_report.html'
-        
-        elif report_type == 'class':
-            context['report'] = report.class_performance_report()
-            context['class_level'] = get_object_or_404(ClassLevel, pk=item_id, school=s
+
+        context = {
+            "is_pdf": True,
+        }
+
+        if report_type == "student":
+
+            context.update({
+                "report":
+                    report.student_performance_report(
+                        item_id
+                    ),
+
+                "student":
+                    get_object_or_404(
+                        StudentProfile,
+                        pk=item_id,
+                    ),
+            })
+
+            template = (
+                "core/reports/student_report.html"
+            )
+
+        elif report_type == "class":
+
+            context.update({
+                "report":
+                    report.class_performance_report(),
+            })
+
+            filters = {"pk": item_id}
+
+            if school:
+                filters["school"] = school
+
+            context["class_level"] = (
+                get_object_or_404(
+                    ClassLevel,
+                    **filters
+                )
+            )
+
+            template = (
+                "core/reports/class_report.html"
+            )
+
+        elif report_type == "term":
+
+            context.update({
+                "report":
+                    report.term_report(),
+
+                "term":
+                    item_id,
+            })
+
+            template = (
+                "core/reports/term_report.html"
+            )
+
+        elif report_type == "subject":
+
+            context.update({
+                "report":
+                    report.subject_performance_report(
+                        item_id
+                    ),
+
+                "subject":
+                    get_object_or_404(
+                        Subject,
+                        pk=item_id,
+                        school=school
+                    )
+                    if school
+                    else get_object_or_404(
+                        Subject,
+                        pk=item_id
+                    ),
+            })
+
+            template = (
+                "core/reports/subject_report.html"
+            )
+
+        else:
+            return None
+
+        return render_to_string(
+            template,
+            context=context,
+            request=request,
+        )
+```
