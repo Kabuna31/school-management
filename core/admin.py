@@ -132,32 +132,39 @@ class SchoolScopedMixin:
     def save_model(self, request, obj, form, change):
         """Auto-assign school from user's profile if available"""
         if hasattr(obj, "school"):
+            # For scoped users, auto-assign from user
             if self._is_scoped(request):
                 school = self._user_school(request)
-
-                if not school:
-                    messages.error(
-                        request,
-                        "Your account is not linked to a school, "
-                        "and no school exists in the system. "
-                        "Please create a school first."
-                    )
-                    return
-                else:
+                if school:
                     obj.school = school
-
+                else:
+                    # If user has no school, try first school
+                    from .models import School
+                    school = School.objects.first()
+                    if school:
+                        obj.school = school
+                        messages.warning(request, f"Auto-assigned to school: {school.name}")
+                    else:
+                        messages.error(request, "No school exists. Please create one first.")
+                        return
+            
+            # For superusers or if school is still not set
             elif not obj.school:
-                messages.error(
-                    request,
-                    "School is required. Please select a school."
-                )
-                return
+                from .models import School
+                school = School.objects.first()
+                if school:
+                    obj.school = school
+                    messages.warning(request, f"Auto-assigned to school: {school.name}")
+                else:
+                    messages.error(request, "School is required. Please select a school.")
+                    return
 
         super().save_model(request, obj, form, change)
 
     def get_fields(self, request, obj=None):
         fields = list(super().get_fields(request, obj))
 
+        # For scoped users, remove school from the form (auto-assigned)
         if self._is_scoped(request) and "school" in fields:
             fields.remove("school")
 
@@ -186,7 +193,6 @@ class SchoolScopedMixin:
             kwargs["queryset"] = School.objects.filter(pk=school.pk)
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
 
 # ── Scoped inline base ─────────────────────────────────────────────────────
 
