@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% load role_tags %}
+{% block title %}Generate Report Cards{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto space-y-6">
+    <h1 class="text-2xl font-bold text-gray-800">
+        <i class="fas fa-cog text-blue-600 mr-2"></i>Generate Report Cards
+    </h1>
+
+    <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-4 text-sm">
+        <i class="fas fa-info-circle mr-1"></i>
+        This will generate (or regenerate) report cards for all students in the selected class and term.
+        Existing cards will be updated with the latest marks and positions.
+    </div>
+
+    <form method="post" class="bg-white rounded-xl shadow p-6 space-y-4">
+        {% csrf_token %}
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Term <span class="text-red-500">*</span></label>
+            <select name="term" required
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                <option value="">Select Term</option>
+                {% for term in terms %}
+                <option value="{{ term }}">{{ term }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Class <span class="text-red-500">*</span></label>
+            <select name="class_level" required
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                <option value="">Select Class</option>
+                {% for class in classes %}
+                <option value="{{ class.pk }}">{{ class.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="flex gap-3 pt-2">
+            <button type="submit"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition">
+                <i class="fas fa-cog mr-1"></i> Generate
+            </button>
+            <a href="{% url 'core:report_card_list' %}"
+               class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg text-sm font-medium transition">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

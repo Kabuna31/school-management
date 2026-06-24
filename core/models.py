@@ -36,26 +36,19 @@ ROLE_CHOICES = (
     ('student',        'Student'),
 )
 
-# Roles that are scoped to their own school (used by admin + views).
-# Every role that gets a school assigned must be listed here so that
-# admin querysets, dropdowns, and save logic restrict them correctly.
-# system_admin is intentionally excluded — they see all schools.
 SCOPED_ROLES = [
     'school_admin', 'headteacher', 'dos', 'bursar',
     'nurse', 'librarian', 'lab_technician', 'class_teacher',
     'teacher', 'parent', 'student',
 ]
 
-# Roles that can enter / edit marks
 MARK_ENTRY_ROLES = [
     'system_admin', 'school_admin', 'headteacher',
     'dos', 'teacher', 'class_teacher',
 ]
 
-# Roles that can manage (view/edit/delete) all school marks
 MARK_MANAGE_ROLES = ['school_admin', 'headteacher']
 
-# Roles that have a dedicated dashboard (others fall back to /admin/)
 DASHBOARD_ROLES = [
     'system_admin', 'school_admin', 'headteacher', 'dos',
     'bursar', 'teacher', 'class_teacher', 'student', 'parent',
@@ -98,10 +91,6 @@ class User(AbstractUser):
         return self.role in SCOPED_ROLES
 
     def clean(self):
-        """
-        Called by Django forms and admin (not by save()).
-        Validates school/role consistency so errors surface cleanly in the UI.
-        """
         super().clean()
 
         if self.role == 'system_admin' and self.school_id:
@@ -121,12 +110,6 @@ class User(AbstractUser):
             })
 
     def save(self, *args, **kwargs):
-        """
-        Auto-correct system_admin fields before saving.
-        Validation is intentionally left to clean() / forms so that
-        programmatic saves (management commands, signals, tests) do not
-        raise ValidationError unexpectedly.
-        """
         if self.role == 'system_admin':
             self.school    = None
             self.school_id = None
@@ -151,7 +134,6 @@ class EmployeeProfile(models.Model):
         return f"{self.user.get_full_name()} [{self.staff_id}]"
 
     def clean(self):
-        """Ensure the employee's school matches the linked user's school."""
         super().clean()
         if self.user_id and self.school_id:
             if self.user.school_id != self.school_id:
@@ -169,7 +151,6 @@ class ParentProfile(models.Model):
         return self.user.get_full_name() or self.user.username
 
     def clean(self):
-        """Ensure the parent's school matches the linked user's school."""
         super().clean()
         if self.user_id and self.school_id:
             if self.user.school_id != self.school_id:
@@ -229,7 +210,6 @@ class StudentProfile(models.Model):
         return f"{self.user.get_full_name()} ({self.admission_number})"
 
     def clean(self):
-        """Ensure the student's school matches the linked user's school."""
         super().clean()
         if self.user_id and self.school_id:
             if self.user.school_id != self.school_id:
@@ -301,9 +281,10 @@ class Mark(models.Model):
     def grade(self):
         t = self.total_score
         if t >= 80: return 'A'
-        if t >= 65: return 'B'
-        if t >= 50: return 'C'
-        return 'F'
+        if t >= 70: return 'B'
+        if t >= 60: return 'C'
+        if t >= 50: return 'D'
+        return 'E'
 
     @property
     def grade_points(self):
@@ -316,8 +297,91 @@ class Mark(models.Model):
         return 1
 
 
+
+
 # ---------------------------------------------------------------------------
-# 6. Timetable
+# 6. Report Cards
+# ---------------------------------------------------------------------------
+
+class ReportCard(models.Model):
+    """
+    One report card per student per term.
+    Covers both Mid Term and End of Term marks combined on one card.
+    """
+    school          = models.ForeignKey(School, on_delete=models.CASCADE)
+    student         = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='report_cards')
+    term            = models.CharField(max_length=10, choices=TERM_CHOICES)
+    class_level     = models.ForeignKey(ClassLevel, on_delete=models.SET_NULL, null=True, blank=True)
+    stream          = models.ForeignKey(Stream, on_delete=models.SET_NULL, null=True, blank=True)
+    class_position  = models.PositiveIntegerField(null=True, blank=True)
+    total_students  = models.PositiveIntegerField(null=True, blank=True)
+    aggregate_score = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    teacher_comment    = models.TextField(blank=True)
+    headteacher_remark = models.TextField(blank=True)
+    generated_by    = models.ForeignKey(
+        'User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='generated_report_cards',
+    )
+    generated_at = models.DateTimeField(auto_now_add=True)
+    updated_at   = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('school', 'student', 'term')
+        ordering        = ['term', 'student']
+
+    def __str__(self):
+        return f"{self.student} — {self.term} Report Card"
+
+    @property
+    def total_grade_points(self):
+        return sum(e.grade_points for e in self.entries.all())
+
+    @property
+    def average_score(self):
+        entries = list(self.entries.all())
+        if not entries:
+            return 0
+        return round(sum(e.total for e in entries) / len(entries), 1)
+
+
+class ReportCardEntry(models.Model):
+    """One subject row on a report card."""
+    report_card = models.ForeignKey(ReportCard, on_delete=models.CASCADE, related_name='entries')
+    subject     = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    mid_term    = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    end_term    = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+
+    class Meta:
+        unique_together = ('report_card', 'subject')
+        ordering        = ['subject__name']
+
+    def __str__(self):
+        return f"{self.report_card} — {self.subject}"
+
+    @property
+    def total(self):
+        return float(self.mid_term or 0) + float(self.end_term or 0)
+
+    @property
+    def grade(self):
+        t = self.total
+        if t >= 80: return 'A'
+        if t >= 70: return 'B'
+        if t >= 60: return 'C'
+        if t >= 50: return 'D'
+        return 'E'
+
+    @property
+    def grade_points(self):
+        t = self.total
+        if t >= 80: return 5
+        if t >= 70: return 4
+        if t >= 60: return 3
+        if t >= 50: return 2
+        return 1
+
+# ---------------------------------------------------------------------------
+# 7. Timetable
 # ---------------------------------------------------------------------------
 DAY_CHOICES = [
     ('Mon', 'Monday'), ('Tue', 'Tuesday'), ('Wed', 'Wednesday'),

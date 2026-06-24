@@ -52,6 +52,12 @@ urlpatterns = [
     path('marksheet/<int:student_id>/pdf/', views.DownloadReportPDFView.as_view(), {'report_type': 'marksheet'}, name='marksheet_pdf'),
     path('marksheet/<int:student_id>/json/', views.ExportReportJSONView.as_view(), {'report_type': 'marksheet'}, name='marksheet_json'),
     path('marksheet/<int:student_id>/print/', views.PrintMarksheetView.as_view(), name='marksheet_print'),
+    # Report Cards
+    path('report-cards/', views.ReportCardListView.as_view(), name='report_card_list'),
+    path('report-cards/generate/', views.GenerateReportCardsView.as_view(), name='generate_report_cards'),
+    path('report-cards/<int:card_id>/', views.ReportCardDetailView.as_view(), name='report_card_detail'),
+    path('report-cards/<int:card_id>/edit/', views.ReportCardEditView.as_view(), name='report_card_edit'),
+    path('report-cards/<int:card_id>/print/', views.ReportCardPrintView.as_view(), name='report_card_print'),
     
     # Performance Analytics
     path('analytics/', views.PerformanceAnalyticsView.as_view(), name='analytics'),

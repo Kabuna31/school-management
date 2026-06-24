@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% load role_tags %}
+{% block title %}Report Card — {{ card.student.user.get_full_name }}{% endblock %}
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-800">
+            <i class="fas fa-file-alt text-blue-600 mr-2"></i>
+            {{ card.student.user.get_full_name }} — {{ card.term }}
+        </h1>
+        <div class="flex gap-2">
+            <a href="{% url 'core:report_card_edit' card.pk %}"
+               class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+                <i class="fas fa-edit mr-1"></i> Edit Comments
+            </a>
+            <a href="{% url 'core:report_card_print' card.pk %}" target="_blank"
+               class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+                <i class="fas fa-print mr-1"></i> Print
+            </a>
+            <a href="{% url 'core:report_card_list' %}"
+               class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+                Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Student Info -->
+    <div class="bg-white rounded-xl shadow p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div><p class="text-gray-500 text-xs uppercase">Student</p><p class="font-semibold">{{ card.student.user.get_full_name }}</p></div>
+        <div><p class="text-gray-500 text-xs uppercase">Admission</p><p class="font-semibold">{{ card.student.admission_number }}</p></div>
+        <div><p class="text-gray-500 text-xs uppercase">Class</p><p class="font-semibold">{{ card.class_level }}</p></div>
+        <div><p class="text-gray-500 text-xs uppercase">Stream</p><p class="font-semibold">{{ card.stream|default:"—" }}</p></div>
+        <div><p class="text-gray-500 text-xs uppercase">Term</p><p class="font-semibold">{{ card.term }}</p></div>
+        <div><p class="text-gray-500 text-xs uppercase">Position</p>
+            <p class="font-semibold">
+                {% if card.class_position %}{{ card.class_position }} / {{ card.total_students }}{% else %}—{% endif %}
+            </p>
+        </div>
+        <div><p class="text-gray-500 text-xs uppercase">Avg Score</p><p class="font-semibold">{{ card.aggregate_score|default:"—" }}</p></div>
+        <div><p class="text-gray-500 text-xs uppercase">Grade Points</p><p class="font-semibold">{{ card.total_grade_points }}</p></div>
+    </div>
+
+    <!-- Marks Table -->
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
+                <tr>
+                    <th class="px-4 py-3 text-left">Subject</th>
+                    <th class="px-4 py-3 text-center">Mid Term<br><span class="text-gray-400 normal-case">/20</span></th>
+                    <th class="px-4 py-3 text-center">End of Term<br><span class="text-gray-400 normal-case">/80</span></th>
+                    <th class="px-4 py-3 text-center">Total<br><span class="text-gray-400 normal-case">/100</span></th>
+                    <th class="px-4 py-3 text-center">Grade</th>
+                    <th class="px-4 py-3 text-center">Points</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for entry in entries %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 font-medium text-gray-800">{{ entry.subject.name }}</td>
+                    <td class="px-4 py-3 text-center">{{ entry.mid_term }}</td>
+                    <td class="px-4 py-3 text-center">{{ entry.end_term }}</td>
+                    <td class="px-4 py-3 text-center font-semibold">{{ entry.total }}</td>
+                    <td class="px-4 py-3 text-center">
+                        <span class="px-2 py-1 rounded-full text-xs font-bold
+                            {% if entry.grade == 'A' %}bg-green-100 text-green-800
+                            {% elif entry.grade == 'B' %}bg-blue-100 text-blue-800
+                            {% elif entry.grade == 'C' %}bg-yellow-100 text-yellow-800
+                            {% elif entry.grade == 'D' %}bg-orange-100 text-orange-800
+                            {% else %}bg-red-100 text-red-800{% endif %}">
+                            {{ entry.grade }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-center">{{ entry.grade_points }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Comments -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl shadow p-5">
+            <p class="text-xs uppercase font-semibold text-gray-500 mb-2">Teacher's Comment</p>
+            <p class="text-gray-800 text-sm">{{ card.teacher_comment|default:"No comment added." }}</p>
+        </div>
+        <div class="bg-white rounded-xl shadow p-5">
+            <p class="text-xs uppercase font-semibold text-gray-500 mb-2">Headteacher's Remark</p>
+            <p class="text-gray-800 text-sm">{{ card.headteacher_remark|default:"No remark added." }}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

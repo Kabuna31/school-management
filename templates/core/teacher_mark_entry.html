@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load role_tags %}
 
 {% block title %}Enter Marks{% endblock %}
 
@@ -85,7 +86,7 @@
     <input type="hidden" name="subject" value="{{ selected_subject }}">
     <input type="hidden" name="term" value="{{ selected_term }}">
     <input type="hidden" name="exam" value="{{ selected_exam }}">
-    
+
     <div class="mb-4">
         <p class="text-sm text-gray-600">
             <span class="font-semibold">Class:</span> {{ selected_class }} |
@@ -98,7 +99,7 @@
             Max mark: {% if selected_exam == 'Mid Term' %}20{% else %}80{% endif %}
         </p>
     </div>
-    
+
     <div class="overflow-x-auto">
         <table class="w-full">
             <thead class="bg-gray-50">
@@ -116,8 +117,8 @@
                     <td class="px-4 py-2 text-sm">{{ student.user.get_full_name }}</td>
                     <td class="px-4 py-2 text-sm">{{ student.admission_number }}</td>
                     <td class="px-4 py-2 text-sm">
-                        <input type="number" 
-                               name="student_{{ student.pk }}" 
+                        <input type="number"
+                               name="student_{{ student.pk }}"
                                value="{{ existing_marks|get_item:student.pk|default:'' }}"
                                class="w-24 rounded-lg border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200"
                                step="0.5"
@@ -129,7 +130,7 @@
             </tbody>
         </table>
     </div>
-    
+
     <div class="mt-4">
         <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition">
             <i class="fas fa-save mr-2"></i> Save All Marks

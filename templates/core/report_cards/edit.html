@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% load role_tags %}
+{% block title %}Edit Comments — {{ card.student.user.get_full_name }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <h1 class="text-2xl font-bold text-gray-800">
+        <i class="fas fa-edit text-yellow-500 mr-2"></i>
+        Edit Comments — {{ card.student.user.get_full_name }}
+    </h1>
+    <p class="text-sm text-gray-500">{{ card.term }} | {{ card.class_level }}</p>
+
+    <form method="post" class="bg-white rounded-xl shadow p-6 space-y-5">
+        {% csrf_token %}
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Teacher's Comment</label>
+            <textarea name="teacher_comment" rows="4"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter teacher's comment...">{{ card.teacher_comment }}</textarea>
+        </div>
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Headteacher's Remark</label>
+            <textarea name="headteacher_remark" rows="4"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter headteacher's remark...">{{ card.headteacher_remark }}</textarea>
+        </div>
+        <div class="flex gap-3">
+            <button type="submit"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition">
+                <i class="fas fa-save mr-1"></i> Save Comments
+            </button>
+            <a href="{% url 'core:report_card_detail' card.pk %}"
+               class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg text-sm font-medium transition">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}
