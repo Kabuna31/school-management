@@ -14,7 +14,7 @@ class UserResource(resources.ModelResource):
     """
     Import rules:
       - Plain-text passwords are hashed automatically.
-      - Blank password → default password 'default123' (admin resets later).
+      - Blank password → default password (first word of school name + '123').
       - system_admin role can only be imported by a superuser;
         otherwise the role is silently downgraded to school_admin.
       - is_superuser and is_staff flags are set correctly after each row.
@@ -23,6 +23,8 @@ class UserResource(resources.ModelResource):
       - password and is_superuser are always excluded.
     """
 
+    _default_password_cache = {}
+
     school = fields.Field(
         column_name='school',
         attribute='school',
@@ -30,28 +32,28 @@ class UserResource(resources.ModelResource):
     )
 
     class Meta:
-        model            = User
+        model                = User
         import_id_fields = ('username',)   # match on username; never on id
-        fields           = (
+        fields               = (
             'id', 'username', 'password', 'email',
             'first_name', 'last_name', 'role', 'school',
             'is_active', 'is_staff',
         )
-        export_order     = (
+        export_order         = (
             'id', 'username', 'email', 'first_name', 'last_name',
             'role', 'school', 'is_active',
         )
         # Never expose these on export
-        exclude          = ('password', 'is_superuser')
-        skip_unchanged   = True
-        report_skipped   = True
+        exclude              = ('password', 'is_superuser')
+        skip_unchanged       = True
+        report_skipped       = True
 
     # ── Before row ────────────────────────────────────────────────────────
 
     def before_import_row(self, row, **kwargs):
         """
         1. Block non-superusers from importing system_admin accounts.
-        2. Hash plain-text passwords; set default password if blank.
+        2. Hash plain-text passwords; set default password (first word of school + '123') if blank.
         """
         # ── Role protection ───────────────────────────────────────────────
         request = kwargs.get('user')   # django-import-export passes request user here
@@ -64,8 +66,14 @@ class UserResource(resources.ModelResource):
         # ── Password hashing ──────────────────────────────────────────────
         password = (row.get('password') or '').strip()
         if not password:
-            # No password supplied → use default password
-            row['password'] = make_password('default123')
+            school_str = str(row.get('school') or '').strip()
+            first_word = school_str.split()[0].lower() if school_str else 'school'
+            default_plain = f"{first_word}123"
+
+            if default_plain not in self._default_password_cache:
+                self._default_password_cache[default_plain] = make_password(default_plain)
+
+            row['password'] = self._default_password_cache[default_plain]
         elif not password.startswith(('pbkdf2_sha256$', 'bcrypt$', 'argon2')):
             # Plain text → hash it
             row['password'] = make_password(password)
@@ -117,12 +125,12 @@ class UserResource(resources.ModelResource):
 
 class SchoolResource(resources.ModelResource):
     class Meta:
-        model            = School
+        model                = School
         import_id_fields = ('code',)
-        fields           = ('id', 'name', 'code', 'address', 'phone', 'email')
-        export_order     = ('id', 'name', 'code', 'address', 'phone', 'email')
-        skip_unchanged   = True
-        report_skipped   = True
+        fields               = ('id', 'name', 'code', 'address', 'phone', 'email')
+        export_order         = ('id', 'name', 'code', 'address', 'phone', 'email')
+        skip_unchanged       = True
+        report_skipped       = True
 
 
 # ── EmployeeProfile ────────────────────────────────────────────────────────
@@ -140,12 +148,12 @@ class EmployeeProfileResource(resources.ModelResource):
     )
 
     class Meta:
-        model            = EmployeeProfile
+        model                = EmployeeProfile
         import_id_fields = ('user',)
-        fields           = ('user', 'staff_id', 'hire_date', 'school')
-        export_order     = ('user', 'staff_id', 'hire_date', 'school')
-        skip_unchanged   = True
-        report_skipped   = True
+        fields               = ('user', 'staff_id', 'hire_date', 'school')
+        export_order         = ('user', 'staff_id', 'hire_date', 'school')
+        skip_unchanged       = True
+        report_skipped       = True
 
 
 # ── ParentProfile ──────────────────────────────────────────────────────────
@@ -163,12 +171,12 @@ class ParentProfileResource(resources.ModelResource):
     )
 
     class Meta:
-        model            = ParentProfile
+        model                = ParentProfile
         import_id_fields = ('user',)
-        fields           = ('user', 'phone_number', 'school')
-        export_order     = ('user', 'phone_number', 'school')
-        skip_unchanged   = True
-        report_skipped   = True
+        fields               = ('user', 'phone_number', 'school')
+        export_order         = ('user', 'phone_number', 'school')
+        skip_unchanged       = True
+        report_skipped       = True
 
 
 # ── Stream ─────────────────────────────────────────────────────────────────
@@ -181,12 +189,12 @@ class StreamResource(resources.ModelResource):
     )
 
     class Meta:
-        model            = Stream
+        model                = Stream
         import_id_fields = ('name', 'school')
-        fields           = ('id', 'name', 'school')
-        export_order     = ('id', 'name', 'school')
-        skip_unchanged   = True
-        report_skipped   = True
+        fields               = ('id', 'name', 'school')
+        export_order         = ('id', 'name', 'school')
+        skip_unchanged       = True
+        report_skipped       = True
 
 
 # ── ClassLevel ─────────────────────────────────────────────────────────────
@@ -204,12 +212,12 @@ class ClassLevelResource(resources.ModelResource):
     )
 
     class Meta:
-        model            = ClassLevel
+        model                = ClassLevel
         import_id_fields = ('name', 'school')
-        fields           = ('id', 'name', 'school', 'class_teacher')
-        export_order     = ('id', 'name', 'school', 'class_teacher')
-        skip_unchanged   = True
-        report_skipped   = True
+        fields               = ('id', 'name', 'school', 'class_teacher')
+        export_order         = ('id', 'name', 'school', 'class_teacher')
+        skip_unchanged       = True
+        report_skipped       = True
 
 
 # ── StudentProfile ─────────────────────────────────────────────────────────
@@ -237,18 +245,18 @@ class StudentProfileResource(resources.ModelResource):
     )
 
     class Meta:
-        model            = StudentProfile
+        model                = StudentProfile
         import_id_fields = ('admission_number',)
-        fields           = (
+        fields               = (
             'user', 'admission_number', 'gender',
             'class_level', 'stream', 'school',
         )
-        export_order     = (
+        export_order         = (
             'user', 'admission_number', 'gender',
             'class_level', 'stream', 'school',
         )
-        skip_unchanged   = True
-        report_skipped   = True
+        skip_unchanged       = True
+        report_skipped       = True
 
 
 # ── Subject ────────────────────────────────────────────────────────────────
@@ -261,12 +269,12 @@ class SubjectResource(resources.ModelResource):
     )
 
     class Meta:
-        model            = Subject
+        model                = Subject
         import_id_fields = ('code', 'school')
-        fields           = ('id', 'name', 'code', 'school')
-        export_order     = ('id', 'name', 'code', 'school')
-        skip_unchanged   = True
-        report_skipped   = True
+        fields               = ('id', 'name', 'code', 'school')
+        export_order         = ('id', 'name', 'code', 'school')
+        skip_unchanged       = True
+        report_skipped       = True
 
 
 # ── Mark ───────────────────────────────────────────────────────────────────
@@ -294,18 +302,18 @@ class MarkResource(resources.ModelResource):
     )
 
     class Meta:
-        model            = Mark
+        model                = Mark
         import_id_fields = ('student', 'subject', 'term', 'exam', 'school')
-        fields           = (
+        fields               = (
             'student', 'subject', 'teacher',
             'term', 'exam', 'mid_term', 'end_term', 'school',
         )
-        export_order     = (
+        export_order         = (
             'student', 'subject', 'teacher',
             'term', 'exam', 'mid_term', 'end_term', 'school',
         )
-        skip_unchanged   = True
-        report_skipped   = True
+        skip_unchanged       = True
+        report_skipped       = True
 
 
 # ── Timetable ──────────────────────────────────────────────────────────────
@@ -338,18 +346,18 @@ class TimetableResource(resources.ModelResource):
     )
 
     class Meta:
-        model            = Timetable
+        model                = Timetable
         import_id_fields = ('class_level', 'stream', 'subject', 'day', 'start_time', 'school')
-        fields           = (
+        fields               = (
             'school', 'class_level', 'stream', 'subject',
             'teacher', 'day', 'start_time', 'end_time', 'room',
         )
-        export_order     = (
+        export_order         = (
             'school', 'class_level', 'stream', 'subject',
             'teacher', 'day', 'start_time', 'end_time', 'room',
         )
-        skip_unchanged   = True
-        report_skipped   = True
+        skip_unchanged       = True
+        report_skipped       = True
 
 
 # ── Exports ────────────────────────────────────────────────────────────────
