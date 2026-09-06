@@ -2,10 +2,6 @@ import os
 import dj_database_url
 from pathlib import Path
 
-
-# Replace MediaStorage with CacheStorage
-IMPORT_EXPORT_TMP_STORAGE_CLASS = 'import_export.tmp_storages.CacheStorage'
-
 # ============================================================
 # Paths
 # ============================================================
@@ -234,10 +230,21 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@schoolms.com')
 
 # ============================================================
+# ============================================================
 # Session & Cache Settings
 # ============================================================
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'django_cache_table',
+    }
+}
+
 SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
 SESSION_COOKIE_SAMESITE = 'Lax'
+
+# Use database/cache storage for django-import-export to avoid ephemeral disk issues on Render
+IMPORT_EXPORT_TMP_STORAGE_CLASS = 'import_export.tmp_storages.CacheStorage'
 
 # ============================================================
 # Misc Settings
