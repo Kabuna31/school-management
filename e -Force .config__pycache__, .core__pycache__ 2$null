@@ -1,0 +1,18 @@
+[1mdiff --git a/config/__pycache__/settings.cpython-314.pyc b/config/__pycache__/settings.cpython-314.pyc[m
+[1mindex 3e92834..9142c6a 100644[m
+Binary files a/config/__pycache__/settings.cpython-314.pyc and b/config/__pycache__/settings.cpython-314.pyc differ
+[1mdiff --git a/core/__pycache__/admin.cpython-314.pyc b/core/__pycache__/admin.cpython-314.pyc[m
+[1mindex ca3fcb5..1c70d6d 100644[m
+Binary files a/core/__pycache__/admin.cpython-314.pyc and b/core/__pycache__/admin.cpython-314.pyc differ
+[1mdiff --git a/core/__pycache__/models.cpython-314.pyc b/core/__pycache__/models.cpython-314.pyc[m
+[1mindex 9ac5471..8cc2b79 100644[m
+Binary files a/core/__pycache__/models.cpython-314.pyc and b/core/__pycache__/models.cpython-314.pyc differ
+[1mdiff --git a/core/__pycache__/urls.cpython-314.pyc b/core/__pycache__/urls.cpython-314.pyc[m
+[1mindex 47df0d4..9338a7c 100644[m
+Binary files a/core/__pycache__/urls.cpython-314.pyc and b/core/__pycache__/urls.cpython-314.pyc differ
+[1mdiff --git a/core/__pycache__/views.cpython-314.pyc b/core/__pycache__/views.cpython-314.pyc[m
+[1mindex b52c8eb..f5c2e70 100644[m
+Binary files a/core/__pycache__/views.cpython-314.pyc and b/core/__pycache__/views.cpython-314.pyc differ
+[1mdiff --git a/db.sqlite3 b/db.sqlite3[m
+[1mindex ff499e3..6c9c40b 100644[m
+Binary files a/db.sqlite3 and b/db.sqlite3 differ

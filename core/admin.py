@@ -383,11 +383,82 @@ class StudentProfileInline(SchoolScopedInline):
 
 # ── School Admin ──────────────────────────────────────────────────────────
 
-@admin.register(School)
-class SchoolAdmin(ImportExportModelAdmin):
-    resource_class = SchoolResource
-    list_display     = ('name', 'code', 'phone', 'email')
-    search_fields    = ('name', 'code')
+@admin.register(StudentProfile)
+class StudentProfileAdmin(AutoSchoolAdmin, SchoolScopedMixin):
+    resource_class = StudentProfileResource
+    list_display = (
+        'full_name', 'admission_number', 'school',
+        'class_level', 'stream', 'gender_badge', 'marks_count',
+    )
+    list_filter = ('school', 'class_level', 'stream', 'gender')
+    search_fields = ('user__username', 'user__first_name', 'user__last_name', 'admission_number')
+    filter_horizontal = ('parent',)
+    ordering = ('school', 'class_level', 'stream', 'user__first_name')
+    list_per_page = 30
+    readonly_fields = ('passport_preview',)
+
+    fieldsets = (
+        ('Personal', {
+            'fields': ('user', 'admission_number', 'gender', 'passport_photo', 'passport_preview'),
+        }),
+        ('Academic', {
+            'fields': ('class_level', 'stream'),
+        }),
+        ('Parents', {
+            'fields': ('parent',),
+        }),
+    )
+
+    # ADD THIS METHOD TO FIX THE ISSUE
+    def save_model(self, request, obj, form, change):
+        """Override to ensure school is always set"""
+        # Set school from user if not already set
+        if not obj.school_id:
+            if request.user.school:
+                obj.school = request.user.school
+                obj.school_id = request.user.school.id
+            elif request.user.is_superuser:
+                # For superusers, try to get school from the user object
+                if obj.user and obj.user.school:
+                    obj.school = obj.user.school
+                    obj.school_id = obj.user.school.id
+                else:
+                    # Fallback to first school
+                    from .models import School
+                    first_school = School.objects.first()
+                    if first_school:
+                        obj.school = first_school
+                        obj.school_id = first_school.id
+        
+        super().save_model(request, obj, form, change)
+
+    @admin.display(description='Name')
+    def full_name(self, obj):
+        return obj.user.get_full_name() or obj.user.username
+
+    @admin.display(description='Gender')
+    def gender_badge(self, obj):
+        color = '#1d4ed8' if obj.gender == 'M' else '#be185d'
+        return format_html(
+            '<span style="background:{};color:#fff;padding:2px 8px;'
+            'border-radius:99px;font-size:11px;font-weight:600;">{}</span>',
+            color, obj.get_gender_display(),
+        )
+
+    @admin.display(description='Marks')
+    def marks_count(self, obj):
+        count = Mark.objects.filter(student=obj).count()
+        url = reverse('admin:core_mark_changelist') + f'?student__user__username={obj.user.username}'
+        return format_html('<a href="{}">{} entries</a>', url, count)
+
+    @admin.display(description='Current Photo')
+    def passport_preview(self, obj):
+        if obj.passport_photo:
+            return format_html(
+                '<img src="{}" style="height:80px;border-radius:4px;" />',
+                obj.passport_photo.url,
+            )
+        return '—'
 
 
 # ── User Admin ────────────────────────────────────────────────────────────

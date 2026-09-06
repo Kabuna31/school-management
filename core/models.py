@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 
 # ---------------------------------------------------------------------------
@@ -297,8 +298,6 @@ class Mark(models.Model):
         return 1
 
 
-
-
 # ---------------------------------------------------------------------------
 # 6. Report Cards
 # ---------------------------------------------------------------------------
@@ -380,6 +379,7 @@ class ReportCardEntry(models.Model):
         if t >= 50: return 2
         return 1
 
+
 # ---------------------------------------------------------------------------
 # 7. Timetable
 # ---------------------------------------------------------------------------
@@ -409,3 +409,136 @@ class Timetable(models.Model):
             f"{self.class_level} {self.get_day_display()} "
             f"{self.start_time}–{self.end_time} {self.subject}"
         )
+
+
+# ---------------------------------------------------------------------------
+# 8. Elections / Voting
+# ---------------------------------------------------------------------------
+
+class Election(models.Model):
+    """A voting event, e.g. 'Student Council Elections 2026'."""
+    school       = models.ForeignKey(School, on_delete=models.CASCADE)
+    title        = models.CharField(max_length=150)
+    description  = models.TextField(blank=True)
+    start_time   = models.DateTimeField()
+    end_time     = models.DateTimeField()
+    is_active    = models.BooleanField(default=True)
+    created_by   = models.ForeignKey(
+        'User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_elections',
+    )
+    created_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-start_time']
+
+    def __str__(self):
+        return f"{self.title} ({self.school})"
+
+    @property
+    def is_open(self):
+        now = timezone.now()
+        return self.is_active and self.start_time <= now <= self.end_time
+
+    def clean(self):
+        super().clean()
+        if self.start_time and self.end_time and self.start_time >= self.end_time:
+            raise ValidationError("Election start_time must be before end_time.")
+
+
+class Position(models.Model):
+    """A role being contested, e.g. 'Head Prefect', 'Sports Prefect'."""
+    election     = models.ForeignKey(Election, on_delete=models.CASCADE, related_name='positions')
+    title        = models.CharField(max_length=100)
+    description  = models.TextField(blank=True)
+    max_votes_per_voter = models.PositiveIntegerField(
+        default=1,
+        help_text="How many candidates a student may select for this position (usually 1).",
+    )
+    order        = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order', 'title']
+        unique_together = ('election', 'title')
+
+    def __str__(self):
+        return f"{self.title} — {self.election.title}"
+
+
+class Candidate(models.Model):
+    school       = models.ForeignKey(School, on_delete=models.CASCADE)
+    position     = models.ForeignKey(Position, on_delete=models.CASCADE, related_name='candidates')
+    student      = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='candidacies')
+    manifesto    = models.TextField(blank=True)
+    photo        = models.ImageField(upload_to='election/candidates/', blank=True, null=True)
+    is_approved  = models.BooleanField(
+        default=False,
+        help_text="Candidate must be approved (e.g. by DOS/headteacher) before appearing on the ballot.",
+    )
+
+    class Meta:
+        unique_together = ('position', 'student')
+        ordering = ['student__user__first_name']
+
+    def __str__(self):
+        return f"{self.student} — {self.position.title}"
+
+    def clean(self):
+        super().clean()
+        if self.student_id and self.school_id and self.student.school_id != self.school_id:
+            raise ValidationError("Candidate's student must belong to the same school.")
+        if self.position_id and self.position.election.school_id != self.school_id:
+            raise ValidationError("Candidate's school must match the election's school.")
+
+    @property
+    def vote_count(self):
+        return self.votes.count()
+
+
+class Vote(models.Model):
+    """
+    One vote cast by a student for one candidate in one position.
+
+    Uniqueness on (position, candidate, voter) prevents voting for the same
+    candidate twice. The actual "max N votes per position" rule is enforced
+    in clean() since max_votes_per_voter can exceed 1, which a simple unique
+    constraint can't express.
+    """
+    school    = models.ForeignKey(School, on_delete=models.CASCADE)
+    position  = models.ForeignKey(Position, on_delete=models.CASCADE, related_name='votes')
+    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='votes')
+    voter     = models.ForeignKey(StudentProfile, on_delete=models.CASCADE, related_name='votes_cast')
+    cast_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('position', 'candidate', 'voter')
+        ordering = ['-cast_at']
+
+    def __str__(self):
+        return f"{self.voter} → {self.candidate} ({self.position.title})"
+
+    def clean(self):
+        super().clean()
+
+        if self.candidate_id and self.position_id and self.candidate.position_id != self.position_id:
+            raise ValidationError("Candidate does not belong to this position.")
+
+        if self.candidate_id and not self.candidate.is_approved:
+            raise ValidationError("Cannot vote for an unapproved candidate.")
+
+        if self.voter_id and self.school_id and self.voter.school_id != self.school_id:
+            raise ValidationError("Voter must belong to the same school as the election.")
+
+        election = self.position.election if self.position_id else None
+        if election and not election.is_open:
+            raise ValidationError("Voting is closed for this election.")
+
+        if self.position_id and self.voter_id:
+            existing = Vote.objects.filter(
+                position=self.position, voter=self.voter
+            ).exclude(pk=self.pk).count()
+            if existing >= self.position.max_votes_per_voter:
+                raise ValidationError(
+                    f"You may only vote for {self.position.max_votes_per_voter} "
+                    f"candidate(s) for {self.position.title}."
+                )
