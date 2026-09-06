@@ -255,3 +255,10 @@ if DEBUG:
         INTERNAL_IPS = ['127.0.0.1', 'localhost']
     except ImportError:
         pass
+
+    # ============================================================
+# Import/Export Settings
+# ============================================================
+IMPORT_EXPORT_SKIP_ADMIN_CONFIRM = True
+
+IMPORT_EXPORT_TMP_STORAGE_CLASS = 'import_export.tmp_storages.MediaStorage'
