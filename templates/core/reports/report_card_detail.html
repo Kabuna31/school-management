@@ -1,0 +1,101 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container">
+    <div class="report-header">
+        <h1>{{ student.user.get_full_name }} - Report Card</h1>
+        <p><strong>Admission Number:</strong> {{ student.admission_number }}</p>
+        <p><strong>Class:</strong> {{ student.class_level.name }} {% if student.stream %}- {{ student.stream.name }}{% endif %}</p>
+        <p><strong>Term:</strong> {{ term|title }} | <strong>Exam:</strong> {{ exam|title }}</p>
+    </div>
+    
+    <div class="report-body">
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Subject</th>
+                    <th>Mid Term</th>
+                    <th>End Term</th>
+                    <th>Total</th>
+                    <th>Grade</th>
+                    <th>Remark</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mark in marks %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ mark.subject.name }}</td>
+                    <td>{{ mark.mid_term|default:"-" }}</td>
+                    <td>{{ mark.end_term|default:"-" }}</td>
+                    <td><strong>{{ mark.total_score|default:"-" }}</strong></td>
+                    <td>
+                        <span class="grade-badge grade-{{ mark.grade|lower }}">
+                            {{ mark.grade|default:"-" }}
+                        </span>
+                    </td>
+                    <td>{{ mark.remark|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="no-marks">No marks recorded for this student</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="4"><strong>Average Score</strong></td>
+                    <td><strong>{{ average|default:"-" }}</strong></td>
+                    <td><strong>{{ overall_grade|default:"-" }}</strong></td>
+                    <td><strong>{{ overall_remark|default:"-" }}</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    
+    <div class="report-footer">
+        <div class="teacher-signature">
+            <p><strong>Class Teacher:</strong> {{ class_teacher|default:"Not assigned" }}</p>
+        </div>
+        <div class="actions">
+            <a href="{% url 'report_card_list' %}?term={{ term }}&exam={{ exam }}" class="btn btn-secondary">Back to List</a>
+            <a href="{% url 'report_card_print' student.id %}?term={{ term }}&exam={{ exam }}" class="btn btn-primary" target="_blank">Print Report</a>
+        </div>
+    </div>
+</div>
+
+<style>
+.container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+.report-header { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+.report-header h1 { margin: 0 0 10px; color: #333; }
+.report-header p { margin: 5px 0; color: #555; }
+
+.report-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+.report-table th { background: #f1f3f5; padding: 12px 15px; text-align: left; border: 1px solid #dee2e6; font-weight: 600; }
+.report-table td { padding: 10px 15px; border: 1px solid #dee2e6; }
+.report-table tfoot td { font-weight: 600; background: #f8f9fa; padding: 12px 15px; }
+.no-marks { text-align: center; color: #999; padding: 30px; }
+
+.grade-badge { padding: 3px 12px; border-radius: 12px; font-weight: 600; font-size: 13px; display: inline-block; }
+.grade-a { background: #28a745; color: white; }
+.grade-b { background: #007bff; color: white; }
+.grade-c { background: #ffc107; color: #333; }
+.grade-f { background: #dc3545; color: white; }
+
+.report-footer { margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
+.actions { display: flex; gap: 10px; }
+.btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block; }
+.btn-primary { background: #007bff; color: white; }
+.btn-primary:hover { background: #0056b3; }
+.btn-secondary { background: #6c757d; color: white; }
+.btn-secondary:hover { background: #5a6268; }
+
+@media print {
+    .btn, .actions { display: none !important; }
+    .container { padding: 0; }
+    .report-header { background: none; border: 1px solid #ddd; }
+}
+</style>
+{% endblock %}

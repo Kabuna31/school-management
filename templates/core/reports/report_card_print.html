@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Report Card - {{ student.user.get_full_name }}</title>
+    <style>
+        @page { margin: 20mm; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+        .report-container { max-width: 100%; }
+        .school-header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 20px; }
+        .school-header h1 { margin: 0; font-size: 24px; }
+        .school-header p { margin: 5px 0; color: #666; }
+        .student-info { margin-bottom: 20px; }
+        .student-info table { width: 100%; }
+        .student-info td { padding: 5px; }
+        .marks-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        .marks-table th { background: #f0f0f0; padding: 8px; text-align: left; border: 1px solid #ddd; }
+        .marks-table td { padding: 8px; border: 1px solid #ddd; }
+        .marks-table tfoot td { font-weight: bold; background: #f9f9f9; }
+        .grade-a { color: green; font-weight: bold; }
+        .grade-b { color: blue; font-weight: bold; }
+        .grade-c { color: orange; font-weight: bold; }
+        .grade-f { color: red; font-weight: bold; }
+        .footer { margin-top: 30px; border-top: 1px solid #ddd; padding-top: 15px; text-align: center; font-size: 12px; color: #666; }
+        .signature { margin-top: 30px; }
+        .signature td { padding: 30px 10px 10px; border-bottom: 1px solid #333; }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="school-header">
+            <h1>{{ school.name }}</h1>
+            <p>{{ school.address|default:"ROCKLAND SECONDARY SCHOOL" }}</p>
+            <p>Phone: {{ school.phone|default:"N/A" }} | Email: {{ school.email|default:"N/A" }}</p>
+        </div>
+        
+        <div class="student-info">
+            <table>
+                <tr>
+                    <td><strong>Student Name:</strong> {{ student.user.get_full_name }}</td>
+                    <td><strong>Admission Number:</strong> {{ student.admission_number }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Class:</strong> {{ student.class_level.name }}</td>
+                    <td><strong>Stream:</strong> {{ student.stream.name|default:"N/A" }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Term:</strong> {{ term|title }}</td>
+                    <td><strong>Exam:</strong> {{ exam|title }}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <table class="marks-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Subject</th>
+                    <th>Mid Term</th>
+                    <th>End Term</th>
+                    <th>Total</th>
+                    <th>Grade</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mark in marks %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ mark.subject.name }}</td>
+                    <td>{{ mark.mid_term|default:"-" }}</td>
+                    <td>{{ mark.end_term|default:"-" }}</td>
+                    <td><strong>{{ mark.total_score|default:"-" }}</strong></td>
+                    <td class="grade-{{ mark.grade|lower }}">{{ mark.grade|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" style="text-align:center; padding:20px; color:#999;">No marks recorded</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="3"><strong>Average Score</strong></td>
+                    <td colspan="3"><strong>{{ average|default:"-" }}</strong></td>
+                </tr>
+                <tr>
+                    <td colspan="3"><strong>Overall Grade</strong></td>
+                    <td colspan="3"><strong>{{ overall_grade|default:"-" }}</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+        
+        <div class="signature">
+            <table style="width:100%;">
+                <tr>
+                    <td style="text-align:center;"><strong>Class Teacher</strong></td>
+                    <td style="text-align:center;"><strong>Head Teacher</strong></td>
+                </tr>
+                <tr>
+                    <td style="text-align:center; padding-top:40px;">_________________</td>
+                    <td style="text-align:center; padding-top:40px;">_________________</td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="footer">
+            <p>Generated on: {% now "F j, Y H:i" %}</p>
+            <p>This is a computer-generated report card. Please verify all entries.</p>
+        </div>
+    </div>
+</body>
+</html>

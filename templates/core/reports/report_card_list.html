@@ -1,0 +1,206 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container">
+    <h1>Student Report Cards</h1>
+    
+    <div class="filters">
+        <form method="get" class="filter-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="term">Term:</label>
+                    <select name="term" id="term">
+                        <option value="">All Terms</option>
+                        <option value="TERM_1" {% if request.GET.term == 'TERM_1' %}selected{% endif %}>Term 1</option>
+                        <option value="TERM_2" {% if request.GET.term == 'TERM_2' %}selected{% endif %}>Term 2</option>
+                        <option value="TERM_3" {% if request.GET.term == 'TERM_3' %}selected{% endif %}>Term 3</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="exam">Exam:</label>
+                    <select name="exam" id="exam">
+                        <option value="">All Exams</option>
+                        <option value="MID_TERM" {% if request.GET.exam == 'MID_TERM' %}selected{% endif %}>Mid Term</option>
+                        <option value="END_TERM" {% if request.GET.exam == 'END_TERM' %}selected{% endif %}>End Term</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="class_level">Class:</label>
+                    <select name="class_level" id="class_level">
+                        <option value="">All Classes</option>
+                        {% for class in class_levels %}
+                        <option value="{{ class.id }}" {% if request.GET.class_level == class.id|stringformat:"s" %}selected{% endif %}>
+                            {{ class.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="stream">Stream:</label>
+                    <select name="stream" id="stream">
+                        <option value="">All Streams</option>
+                        {% for stream in streams %}
+                        <option value="{{ stream.id }}" {% if request.GET.stream == stream.id|stringformat:"s" %}selected{% endif %}>
+                            {{ stream.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">Filter</button>
+                    <a href="{% url 'report_card_list' %}" class="btn btn-secondary">Clear</a>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    {% if report_cards %}
+    <div class="report-cards-grid">
+        {% for report in report_cards %}
+        <div class="report-card">
+            <div class="report-card-header">
+                <h3>{{ report.student.user.get_full_name }}</h3>
+                <p class="admission">Admission: {{ report.student.admission_number }}</p>
+                <p class="class-info">{{ report.student.class_level.name }} 
+                   {% if report.student.stream %}- {{ report.student.stream.name }}{% endif %}</p>
+            </div>
+            
+            <div class="report-card-body">
+                <table class="marks-table">
+                    <thead>
+                        <tr>
+                            <th>Subject</th>
+                            <th>Mid Term</th>
+                            <th>End Term</th>
+                            <th>Total</th>
+                            <th>Grade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mark in report.marks %}
+                        <tr>
+                            <td>{{ mark.subject.name }}</td>
+                            <td>{{ mark.mid_term|default:"-" }}</td>
+                            <td>{{ mark.end_term|default:"-" }}</td>
+                            <td><strong>{{ mark.total_score|default:"-" }}</strong></td>
+                            <td>
+                                <span class="grade-badge grade-{{ mark.grade|lower }}">
+                                    {{ mark.grade|default:"-" }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="no-marks">No marks recorded</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td><strong>Average</strong></td>
+                            <td colspan="2"></td>
+                            <td><strong>{{ report.average|default:"-" }}</strong></td>
+                            <td><strong>{{ report.overall_grade|default:"-" }}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            <div class="report-card-footer">
+                <a href="{% url 'report_card_detail' report.student.id %}?term={{ request.GET.term }}&exam={{ request.GET.exam }}" 
+                   class="btn btn-sm btn-primary">View Full Report</a>
+                <a href="{% url 'report_card_print' report.student.id %}?term={{ request.GET.term }}&exam={{ request.GET.exam }}" 
+                   class="btn btn-sm btn-secondary" target="_blank">Print</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    {% if is_paginated %}
+    <div class="pagination">
+        <span class="step-links">
+            {% if page_obj.has_previous %}
+                <a href="?page=1">&laquo; first</a>
+                <a href="?page={{ page_obj.previous_page_number }}">previous</a>
+            {% endif %}
+
+            <span class="current">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
+            </span>
+
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}">next</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+            {% endif %}
+        </span>
+    </div>
+    {% endif %}
+    
+    {% else %}
+    <div class="no-results">
+        <p>No report cards found. Try adjusting your filters.</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.container { padding: 20px; max-width: 1400px; margin: 0 auto; }
+h1 { margin-bottom: 30px; color: #333; }
+
+/* Filters */
+.filters { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+.filter-form .form-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group label { font-weight: 600; font-size: 14px; color: #555; }
+.form-group select, .form-group input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; min-width: 150px; }
+.btn { padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.btn-primary { background: #007bff; color: white; }
+.btn-primary:hover { background: #0056b3; }
+.btn-secondary { background: #6c757d; color: white; }
+.btn-secondary:hover { background: #5a6268; }
+.btn-sm { padding: 5px 15px; font-size: 12px; }
+
+/* Report Cards Grid */
+.report-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(500px, 1fr)); gap: 25px; }
+.report-card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.report-card-header { background: #f8f9fa; padding: 15px 20px; border-bottom: 1px solid #e0e0e0; }
+.report-card-header h3 { margin: 0; color: #333; font-size: 18px; }
+.report-card-header .admission { margin: 5px 0 0; color: #666; font-size: 13px; }
+.report-card-header .class-info { margin: 2px 0 0; color: #007bff; font-size: 14px; font-weight: 600; }
+.report-card-body { padding: 15px 20px; }
+.marks-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.marks-table th { background: #f1f3f5; padding: 8px 10px; text-align: left; border: 1px solid #dee2e6; font-weight: 600; }
+.marks-table td { padding: 8px 10px; border: 1px solid #dee2e6; }
+.marks-table tfoot td { font-weight: 600; background: #f8f9fa; }
+.no-marks { text-align: center; color: #999; padding: 20px; }
+.grade-badge { padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: 12px; }
+.grade-a { background: #28a745; color: white; }
+.grade-b { background: #007bff; color: white; }
+.grade-c { background: #ffc107; color: #333; }
+.grade-f { background: #dc3545; color: white; }
+
+.report-card-footer { padding: 12px 20px; background: #f8f9fa; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; }
+
+/* No Results */
+.no-results { text-align: center; padding: 60px 20px; background: #f8f9fa; border-radius: 8px; }
+.no-results p { color: #666; font-size: 16px; }
+
+/* Pagination */
+.pagination { margin-top: 30px; text-align: center; }
+.step-links { display: inline-flex; gap: 10px; align-items: center; }
+.step-links a { color: #007bff; text-decoration: none; padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px; }
+.step-links a:hover { background: #f8f9fa; }
+.current { padding: 5px 10px; }
+
+@media (max-width: 768px) {
+    .report-cards-grid { grid-template-columns: 1fr; }
+    .filter-form .form-row { flex-direction: column; }
+    .form-group select, .form-group input { min-width: 100%; }
+}
+</style>
+{% endblock %}
