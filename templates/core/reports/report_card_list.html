@@ -290,6 +290,20 @@
     </div>
     {% endif %}
 
+    <!-- Export Options -->
+    <div class="export-options no-print">
+        <span>Export:</span>
+        <a href="?{{ request.GET.urlencode }}&export=csv" class="btn btn-sm btn-success">
+            <i class="fas fa-file-csv"></i> CSV
+        </a>
+        <a href="?{{ request.GET.urlencode }}&export=excel" class="btn btn-sm btn-success">
+            <i class="fas fa-file-excel"></i> Excel
+        </a>
+        <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-sm btn-success">
+            <i class="fas fa-file-pdf"></i> PDF
+        </a>
+    </div>
+
     {% else %}
     <div class="no-results">
         <i class="fas fa-file-alt" style="font-size: 48px; color: #ccc;"></i>
