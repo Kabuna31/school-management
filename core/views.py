@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views import View
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.template.response import TemplateResponse
@@ -11,6 +12,10 @@ from django.db.models import (
     ExpressionWrapper,
     Sum,
     Q,
+    Case,
+    When,
+    Value,
+    CharField,
 )
 from django.db.models.functions import Coalesce
 from django.urls import reverse
@@ -912,6 +917,293 @@ class MarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, Te
 
 
 # ============================================================
+# Report Card Views
+# ============================================================
+
+REPORT_CARD_VIEW_ROLES = [
+    'system_admin', 'school_admin', 'headteacher', 'dos',
+    'teacher', 'class_teacher', 'student', 'parent',
+]
+
+
+class ReportCardListView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    template_name = "core/reports/report_card_list.html"
+    required_roles = REPORT_CARD_VIEW_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        school = self.get_school()
+        if not school:
+            return ctx
+
+        cards = ReportCard.objects.filter(school=school).select_related(
+            "student", "student__user", "class_level", "stream"
+        ).order_by("term", "student__user__first_name")
+
+        user = self.request.user
+
+        # Narrow the list for non-management roles
+        if user.role == 'student':
+            try:
+                student = StudentProfile.objects.get(user=user)
+                cards = cards.filter(student=student)
+            except StudentProfile.DoesNotExist:
+                cards = cards.none()
+        elif user.role == 'parent':
+            try:
+                parent = ParentProfile.objects.get(user=user)
+                child_ids = list(parent.children.values_list('pk', flat=True))
+                cards = cards.filter(student_id__in=child_ids)
+            except ParentProfile.DoesNotExist:
+                cards = cards.none()
+
+        term = self.request.GET.get("term")
+        class_id = self.request.GET.get("class_level")
+        if term:
+            cards = cards.filter(term=term)
+        if class_id:
+            cards = cards.filter(class_level_id=class_id)
+
+        # Pagination
+        paginator = Paginator(cards, 20)  # 20 report cards per page
+        page = self.request.GET.get('page')
+
+        try:
+            report_cards = paginator.page(page)
+        except PageNotAnInteger:
+            report_cards = paginator.page(1)
+        except EmptyPage:
+            report_cards = paginator.page(paginator.num_pages)
+
+        # Precompute per-card display info
+        for card in report_cards:
+            card.entries_count = card.entries.count()
+            card.avg_score = card.average_score
+
+        ctx["report_cards"] = report_cards
+        ctx["is_paginated"] = True
+        ctx["page_obj"] = report_cards
+        ctx["paginator"] = paginator
+
+        ctx["terms"] = [t[0] for t in TERM_CHOICES]
+        ctx["classes"] = ClassLevel.objects.filter(school=school)
+        ctx["streams"] = Stream.objects.filter(school=school)
+        ctx["selected_term"] = term
+        ctx["selected_class"] = class_id
+        return ctx
+
+
+class GenerateReportCardsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
+    """
+    Builds/refreshes ReportCard + ReportCardEntry rows for every student in a
+    class, for a given term, from existing Mark data.
+    """
+    required_roles = MARK_MANAGE_ROLES
+
+    def get(self, request):
+        school = self.get_school()
+        ctx = {
+            "classes": ClassLevel.objects.filter(school=school) if school else [],
+            "terms": [t[0] for t in TERM_CHOICES],
+        }
+        return render(request, "core/reports/generate_report_cards.html", ctx)
+
+    def post(self, request):
+        school = self.get_school()
+        if not school:
+            return HttpResponseForbidden("You are not associated with a school.")
+
+        class_id = request.POST.get("class_level")
+        term = request.POST.get("term")
+
+        if not class_id or not term:
+            messages.error(request, "Please select a class and a term.")
+            return redirect("core:generate_report_cards")
+
+        class_level = get_object_or_404(ClassLevel, pk=class_id, school=school)
+        students = StudentProfile.objects.filter(school=school, class_level=class_level)
+
+        generated = 0
+        results = []  # (card, aggregate_score) for ranking
+
+        for student in students:
+            marks = Mark.objects.filter(school=school, student=student, term=term).select_related("subject")
+            if not marks.exists():
+                continue
+
+            card, _created = ReportCard.objects.get_or_create(
+                school=school,
+                student=student,
+                term=term,
+                defaults={
+                    "class_level": class_level,
+                    "stream": student.stream,
+                    "generated_by": request.user,
+                },
+            )
+            card.class_level = class_level
+            card.stream = student.stream
+            card.generated_by = request.user
+
+            for mark in marks:
+                ReportCardEntry.objects.update_or_create(
+                    report_card=card,
+                    subject=mark.subject,
+                    defaults={
+                        "mid_term": mark.mid_term,
+                        "end_term": mark.end_term,
+                    },
+                )
+
+            card.aggregate_score = card.average_score
+            card.save()
+            results.append((card, card.aggregate_score or 0))
+            generated += 1
+
+        # Rank by aggregate score within the class/term for class_position
+        results.sort(key=lambda pair: pair[1], reverse=True)
+        total = len(results)
+        for position, (card, _score) in enumerate(results, start=1):
+            card.class_position = position
+            card.total_students = total
+            card.save(update_fields=["class_position", "total_students"])
+
+        if generated:
+            messages.success(request, f"Generated {generated} report card(s) for {class_level} — {term}.")
+        else:
+            messages.warning(request, "No marks found for that class and term.")
+
+        return redirect("core:report_card_list")
+
+
+class ReportCardDetailView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    template_name = "core/reports/report_card_detail.html"
+    required_roles = REPORT_CARD_VIEW_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        school = self.get_school()
+        card_id = self.kwargs.get("card_id")
+        card = get_object_or_404(
+            ReportCard.objects.select_related("student", "student__user", "class_level", "stream"),
+            pk=card_id, school=school,
+        )
+
+        user = self.request.user
+        if user.role == 'student':
+            student = StudentProfile.objects.filter(user=user).first()
+            if not student or card.student_id != student.pk:
+                return HttpResponseForbidden("You can only view your own report card.")
+        elif user.role == 'parent':
+            parent = ParentProfile.objects.filter(user=user).first()
+            child_ids = list(parent.children.values_list('pk', flat=True)) if parent else []
+            if card.student_id not in child_ids:
+                return HttpResponseForbidden("You can only view your children's report cards.")
+
+        entries = card.entries.select_related("subject").order_by("subject__name")
+        for entry in entries:
+            entry.total = (entry.mid_term or 0) + (entry.end_term or 0)
+            entry.grade = entry.grade
+            entry.grade_points = entry.grade_points
+
+        ctx["card"] = card
+        ctx["entries"] = entries
+        ctx["terms"] = [t[0] for t in TERM_CHOICES]
+        return ctx
+
+
+class ReportCardEditView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
+    template_name = "core/reports/report_card_edit.html"
+    required_roles = MARK_MANAGE_ROLES
+
+    def get(self, request, card_id):
+        school = self.get_school()
+        if not school:
+            return HttpResponseForbidden("You are not associated with a school.")
+        card = get_object_or_404(ReportCard, pk=card_id, school=school)
+        ctx = {
+            "card": card,
+            "entries": card.entries.select_related("subject").order_by("subject__name"),
+        }
+        return render(request, self.template_name, ctx)
+
+    def post(self, request, card_id):
+        school = self.get_school()
+        if not school:
+            return HttpResponseForbidden("You are not associated with a school.")
+        card = get_object_or_404(ReportCard, pk=card_id, school=school)
+
+        card.teacher_comment = request.POST.get("teacher_comment", card.teacher_comment)
+        card.headteacher_remark = request.POST.get("headteacher_remark", card.headteacher_remark)
+        card.save()
+
+        for entry in card.entries.all():
+            mid = request.POST.get(f"mid_term_{entry.pk}")
+            end = request.POST.get(f"end_term_{entry.pk}")
+            changed = False
+            if mid is not None and mid != "":
+                try:
+                    entry.mid_term = float(mid)
+                    changed = True
+                except (ValueError, TypeError):
+                    pass
+            if end is not None and end != "":
+                try:
+                    entry.end_term = float(end)
+                    changed = True
+                except (ValueError, TypeError):
+                    pass
+            if changed:
+                entry.save()
+
+        card.aggregate_score = card.average_score
+        card.save(update_fields=["aggregate_score"])
+
+        messages.success(request, "Report card updated successfully!")
+        return redirect("core:report_card_detail", card_id=card.pk)
+
+
+class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    template_name = "core/reports/report_card_print.html"
+    required_roles = REPORT_CARD_VIEW_ROLES
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        school = self.get_school()
+        card_id = self.kwargs.get("card_id")
+        card = get_object_or_404(
+            ReportCard.objects.select_related("student", "student__user", "class_level", "stream"),
+            pk=card_id, school=school,
+        )
+        entries = card.entries.select_related("subject").order_by("subject__name")
+        for entry in entries:
+            entry.total = (entry.mid_term or 0) + (entry.end_term or 0)
+            entry.grade = entry.grade
+
+        ctx["card"] = card
+        ctx["entries"] = entries
+        ctx["school"] = school
+        return ctx
+
+
+class ReportCardDeleteView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
+    required_roles = MARK_MANAGE_ROLES
+
+    def post(self, request, card_id):
+        school = self.get_school()
+        if not school:
+            return HttpResponseForbidden("You are not associated with a school.")
+
+        card = get_object_or_404(ReportCard, pk=card_id, school=school)
+        student_name = card.student.user.get_full_name()
+        term = card.term
+
+        card.delete()
+        messages.success(request, f"Report card for {student_name} - {term} deleted successfully!")
+        return redirect("core:report_card_list")
+
+
+# ============================================================
 # Performance Analytics View
 # ============================================================
 
@@ -934,16 +1226,33 @@ class PerformanceAnalyticsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScop
         total_marks = marks.count()
         avg_score = mark_average(marks)
 
-        # Use DB aggregation instead of loading all marks into Python
+        # 'grade' is a Python @property on Mark, not a DB field, so it can't
+        # be used in .values()/.annotate() directly. Compute the grade bucket
+        # in the database instead, using the same total_score thresholds.
+        marks_with_grade = marks.annotate(
+            total_score=ExpressionWrapper(
+                F('mid_term') + F('end_term'), output_field=FloatField()
+            )
+        ).annotate(
+            grade_calc=Case(
+                When(total_score__gte=80, then=Value('A')),
+                When(total_score__gte=70, then=Value('B')),
+                When(total_score__gte=60, then=Value('C')),
+                When(total_score__gte=50, then=Value('D')),
+                default=Value('E'),
+                output_field=CharField(max_length=1),
+            )
+        )
+
         grade_counts = (
-            marks.values('grade')
+            marks_with_grade.values('grade_calc')
             .annotate(count=Count('id'))
-            .order_by('grade')
+            .order_by('grade_calc')
         )
 
         grade_dist = {}
         for row in grade_counts:
-            grade = row['grade']
+            grade = row['grade_calc']
             count = row['count']
             if grade:
                 grade_dist[grade] = {
@@ -1095,237 +1404,4 @@ class PrintMarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
             ctx['student'] = get_object_or_404(StudentProfile, pk=student_id)
             ctx['term'] = term
 
-        return ctx
-
-
-# ============================================================
-# Report Card Views
-# ============================================================
-
-REPORT_CARD_VIEW_ROLES = [
-    'system_admin', 'school_admin', 'headteacher', 'dos',
-    'teacher', 'class_teacher', 'student', 'parent',
-]
-
-
-class ReportCardListView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    template_name = "core/reports/report_card_list.html"
-    required_roles = REPORT_CARD_VIEW_ROLES
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        school = self.get_school()
-        if not school:
-            return ctx
-
-        cards = ReportCard.objects.filter(school=school).select_related(
-            "student", "student__user", "class_level", "stream"
-        )
-
-        user = self.request.user
-
-        # Narrow the list for non-management roles
-        if user.role == 'student':
-            try:
-                student = StudentProfile.objects.get(user=user)
-                cards = cards.filter(student=student)
-            except StudentProfile.DoesNotExist:
-                cards = cards.none()
-        elif user.role == 'parent':
-            try:
-                parent = ParentProfile.objects.get(user=user)
-                child_ids = list(parent.children.values_list('pk', flat=True))
-                cards = cards.filter(student_id__in=child_ids)
-            except ParentProfile.DoesNotExist:
-                cards = cards.none()
-
-        term = self.request.GET.get("term")
-        class_id = self.request.GET.get("class_level")
-        if term:
-            cards = cards.filter(term=term)
-        if class_id:
-            cards = cards.filter(class_level_id=class_id)
-
-        ctx["report_cards"] = cards.order_by("term", "student__user__first_name")
-        ctx["terms"] = [t[0] for t in TERM_CHOICES]
-        ctx["classes"] = ClassLevel.objects.filter(school=school)
-        ctx["selected_term"] = term
-        ctx["selected_class"] = class_id
-        return ctx
-
-
-class GenerateReportCardsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
-    """
-    Builds/refreshes ReportCard + ReportCardEntry rows for every student in a
-    class, for a given term, from existing Mark data.
-    """
-    required_roles = MARK_MANAGE_ROLES
-
-    def get(self, request):
-        school = self.get_school()
-        ctx = {
-            "classes": ClassLevel.objects.filter(school=school) if school else [],
-            "terms": [t[0] for t in TERM_CHOICES],
-        }
-        return render(request, "core/reports/generate_report_cards.html", ctx)
-
-    def post(self, request):
-        school = self.get_school()
-        if not school:
-            return HttpResponseForbidden("You are not associated with a school.")
-
-        class_id = request.POST.get("class_level")
-        term = request.POST.get("term")
-
-        if not class_id or not term:
-            messages.error(request, "Please select a class and a term.")
-            return redirect("core:generate_report_cards")
-
-        class_level = get_object_or_404(ClassLevel, pk=class_id, school=school)
-        students = StudentProfile.objects.filter(school=school, class_level=class_level)
-
-        generated = 0
-        results = []  # (card, aggregate_score) for ranking
-
-        for student in students:
-            marks = Mark.objects.filter(school=school, student=student, term=term).select_related("subject")
-            if not marks.exists():
-                continue
-
-            card, _created = ReportCard.objects.get_or_create(
-                school=school,
-                student=student,
-                term=term,
-                defaults={
-                    "class_level": class_level,
-                    "stream": student.stream,
-                    "generated_by": request.user,
-                },
-            )
-            card.class_level = class_level
-            card.stream = student.stream
-            card.generated_by = request.user
-
-            for mark in marks:
-                ReportCardEntry.objects.update_or_create(
-                    report_card=card,
-                    subject=mark.subject,
-                    defaults={
-                        "mid_term": mark.mid_term,
-                        "end_term": mark.end_term,
-                    },
-                )
-
-            card.aggregate_score = card.average_score
-            card.save()
-            results.append((card, card.aggregate_score or 0))
-            generated += 1
-
-        # Rank by aggregate score within the class/term for class_position
-        results.sort(key=lambda pair: pair[1], reverse=True)
-        total = len(results)
-        for position, (card, _score) in enumerate(results, start=1):
-            card.class_position = position
-            card.total_students = total
-            card.save(update_fields=["class_position", "total_students"])
-
-        if generated:
-            messages.success(request, f"Generated {generated} report card(s) for {class_level} — {term}.")
-        else:
-            messages.warning(request, "No marks found for that class and term.")
-
-        return redirect("core:report_card_list")
-
-
-class ReportCardDetailView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    template_name = "core/reports/report_card_detail.html"
-    required_roles = REPORT_CARD_VIEW_ROLES
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        school = self.get_school()
-        card_id = self.kwargs.get("card_id")
-        card = get_object_or_404(
-            ReportCard.objects.select_related("student", "student__user", "class_level", "stream"),
-            pk=card_id, school=school,
-        )
-
-        user = self.request.user
-        if user.role == 'student':
-            student = StudentProfile.objects.filter(user=user).first()
-            if not student or card.student_id != student.pk:
-                return HttpResponseForbidden("You can only view your own report card.")
-        elif user.role == 'parent':
-            parent = ParentProfile.objects.filter(user=user).first()
-            child_ids = list(parent.children.values_list('pk', flat=True)) if parent else []
-            if card.student_id not in child_ids:
-                return HttpResponseForbidden("You can only view your children's report cards.")
-
-        ctx["card"] = card
-        ctx["entries"] = card.entries.select_related("subject")
-        return ctx
-
-
-class ReportCardEditView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
-    template_name = "core/reports/report_card_edit.html"
-    required_roles = MARK_MANAGE_ROLES
-
-    def get(self, request, card_id):
-        school = self.get_school()
-        if not school:
-            return HttpResponseForbidden("You are not associated with a school.")
-        card = get_object_or_404(ReportCard, pk=card_id, school=school)
-        ctx = {"card": card, "entries": card.entries.select_related("subject")}
-        return render(request, self.template_name, ctx)
-
-    def post(self, request, card_id):
-        school = self.get_school()
-        if not school:
-            return HttpResponseForbidden("You are not associated with a school.")
-        card = get_object_or_404(ReportCard, pk=card_id, school=school)
-
-        card.teacher_comment = request.POST.get("teacher_comment", card.teacher_comment)
-        card.headteacher_remark = request.POST.get("headteacher_remark", card.headteacher_remark)
-        card.save()
-
-        for entry in card.entries.all():
-            mid = request.POST.get(f"mid_term_{entry.pk}")
-            end = request.POST.get(f"end_term_{entry.pk}")
-            changed = False
-            if mid is not None and mid != "":
-                try:
-                    entry.mid_term = float(mid)
-                    changed = True
-                except (ValueError, TypeError):
-                    pass
-            if end is not None and end != "":
-                try:
-                    entry.end_term = float(end)
-                    changed = True
-                except (ValueError, TypeError):
-                    pass
-            if changed:
-                entry.save()
-
-        card.aggregate_score = card.average_score
-        card.save(update_fields=["aggregate_score"])
-
-        messages.success(request, "Report card updated successfully!")
-        return redirect("core:report_card_detail", card_id=card.pk)
-
-
-class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
-    template_name = "core/reports/report_card_print.html"
-    required_roles = REPORT_CARD_VIEW_ROLES
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        school = self.get_school()
-        card_id = self.kwargs.get("card_id")
-        card = get_object_or_404(
-            ReportCard.objects.select_related("student", "student__user", "class_level", "stream"),
-            pk=card_id, school=school,
-        )
-        ctx["card"] = card
-        ctx["entries"] = card.entries.select_related("subject")
         return ctx
