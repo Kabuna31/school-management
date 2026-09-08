@@ -19,6 +19,10 @@
                         <i class="fas fa-school text-blue-600 text-2xl mr-2"></i>
                         <span class="text-xl font-bold text-gray-800">SchoolMS</span>
                     </a>
+                    <!-- Mobile menu button -->
+                    <button id="sidebarToggle" class="ml-4 text-gray-500 hover:text-gray-700 focus:outline-none lg:hidden">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
                 </div>
                 <div class="flex items-center space-x-4">
                     <span class="text-sm text-gray-600 hidden sm:inline">
@@ -43,8 +47,13 @@
     <div class="flex min-h-screen">
         <!-- Sidebar -->
         {% block sidebar %}
-        <div class="w-64 bg-white shadow-lg min-h-screen border-r border-gray-200 flex-shrink-0">
+        <div id="sidebar" class="w-64 bg-white shadow-lg min-h-screen border-r border-gray-200 flex-shrink-0 transition-transform duration-300 ease-in-out transform lg:translate-x-0 -translate-x-full fixed lg:relative z-40">
             <div class="p-4">
+                <!-- Close button for mobile -->
+                <button id="sidebarClose" class="lg:hidden float-right text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+                
                 <!-- School Info in Sidebar -->
                 <div class="mb-4 pb-4 border-b border-gray-200">
                     <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold">School</div>
@@ -54,14 +63,14 @@
                 <div class="space-y-1">
                     <!-- Dashboard -->
                     <a href="{% url 'core:role_redirect' %}" 
-                       class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                       class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200 {% if request.resolver_match.url_name == 'role_redirect' %}bg-blue-50 text-blue-700{% endif %}">
                         <i class="fas fa-home w-5 text-blue-500"></i>
                         <span class="ml-3">Dashboard</span>
                     </a>
 
                     {% if request.user.role == 'system_admin' %}
                     <a href="{% url 'core:superuser_dashboard' %}" 
-                       class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                       class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200 {% if request.resolver_match.url_name == 'superuser_dashboard' %}bg-blue-50 text-blue-700{% endif %}">
                         <i class="fas fa-users-cog w-5 text-purple-500"></i>
                         <span class="ml-3">System Admin</span>
                     </a>
@@ -74,19 +83,22 @@
 
                     <!-- Report Cards - Available to all authenticated users -->
                     <a href="{% url 'core:report_card_list' %}" 
-                       class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                       class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200 {% if request.resolver_match.url_name == 'report_card_list' %}bg-blue-50 text-blue-700{% endif %}">
                         <i class="fas fa-file-alt w-5 text-green-500"></i>
                         <span class="ml-3">Report Cards</span>
+                        {% if report_card_count %}
+                        <span class="ml-auto bg-blue-500 text-white text-xs px-2 py-1 rounded-full">{{ report_card_count }}</span>
+                        {% endif %}
                     </a>
 
                     {% if request.user.role in 'system_admin,school_admin,headteacher,dos' %}
                     <a href="{% url 'core:analytics' %}" 
-                       class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                       class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200 {% if request.resolver_match.url_name == 'analytics' %}bg-blue-50 text-blue-700{% endif %}">
                         <i class="fas fa-chart-pie w-5 text-orange-500"></i>
                         <span class="ml-3">Analytics</span>
                     </a>
                     <a href="{% url 'core:term_report' 'Term 1' %}" 
-                       class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                       class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200 {% if request.resolver_match.url_name == 'term_report' %}bg-blue-50 text-blue-700{% endif %}">
                         <i class="fas fa-calendar-alt w-5 text-indigo-500"></i>
                         <span class="ml-3">Term Reports</span>
                     </a>
@@ -94,12 +106,12 @@
 
                     {% if request.user.role == 'student' %}
                     <a href="{% url 'core:my_marksheet' %}" 
-                       class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                       class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
                         <i class="fas fa-file-alt w-5 text-green-500"></i>
                         <span class="ml-3">My Marksheet</span>
                     </a>
                     <a href="{% url 'core:my_reports' %}" 
-                       class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                       class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
                         <i class="fas fa-chart-line w-5 text-blue-500"></i>
                         <span class="ml-3">My Performance</span>
                     </a>
@@ -107,7 +119,7 @@
 
                     {% if request.user.role == 'parent' %}
                     <a href="{% url 'core:parent_dashboard' %}" 
-                       class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                       class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
                         <i class="fas fa-child w-5 text-yellow-500"></i>
                         <span class="ml-3">My Children</span>
                     </a>
@@ -120,7 +132,7 @@
 
                     {% if request.user.role in 'system_admin,school_admin,headteacher,dos' %}
                     <a href="{% url 'core:school_marks' %}" 
-                       class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                       class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200 {% if request.resolver_match.url_name == 'school_marks' %}bg-blue-50 text-blue-700{% endif %}">
                         <i class="fas fa-chart-bar w-5 text-purple-500"></i>
                         <span class="ml-3">All Marks</span>
                     </a>
@@ -128,7 +140,7 @@
 
                     {% if request.user.role in 'system_admin,school_admin,headteacher,dos,teacher,class_teacher' %}
                     <a href="{% url 'core:teacher_mark_entry' %}" 
-                       class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                       class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200 {% if request.resolver_match.url_name == 'teacher_mark_entry' %}bg-blue-50 text-blue-700{% endif %}">
                         <i class="fas fa-pen w-5 text-indigo-500"></i>
                         <span class="ml-3">Enter Marks</span>
                     </a>
@@ -138,19 +150,23 @@
                     {% if request.user.is_staff or request.user.role == 'system_admin' %}
                     <div class="pt-3 mt-2 border-t border-gray-200">
                         <a href="/admin/" 
-                           class="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
+                           class="flex items-center px-4 py-2.5 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors duration-200">
                             <i class="fas fa-cog w-5 text-gray-500"></i>
                             <span class="ml-3">Admin Panel</span>
+                            <span class="ml-auto text-xs text-gray-400">v1.0</span>
                         </a>
                     </div>
                     {% endif %}
                 </div>
             </div>
         </div>
+
+        <!-- Overlay for mobile -->
+        <div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden hidden"></div>
         {% endblock %}
 
         <!-- Main Content Area -->
-        <div class="flex-1 p-6 min-w-0">
+        <div class="flex-1 p-4 md:p-6 min-w-0">
     {% else %}
         <!-- Unauthenticated users -->
         <div class="flex-1">
@@ -160,12 +176,23 @@
         {% if messages %}
             <div class="mb-4 space-y-2">
                 {% for message in messages %}
-                    <div class="p-4 rounded-lg border-l-4 
-                        {% if message.tags == 'success' %}bg-green-100 border-green-500 text-green-700
-                        {% elif message.tags == 'error' %}bg-red-100 border-red-500 text-red-700
-                        {% elif message.tags == 'warning' %}bg-yellow-100 border-yellow-500 text-yellow-700
-                        {% else %}bg-blue-100 border-blue-500 text-blue-700{% endif %}">
-                        {{ message }}
+                    <div class="p-4 rounded-lg border-l-4 shadow-sm
+                        {% if message.tags == 'success' %}bg-green-50 border-green-500 text-green-700
+                        {% elif message.tags == 'error' %}bg-red-50 border-red-500 text-red-700
+                        {% elif message.tags == 'warning' %}bg-yellow-50 border-yellow-500 text-yellow-700
+                        {% else %}bg-blue-50 border-blue-500 text-blue-700{% endif %}">
+                        <div class="flex items-center">
+                            {% if message.tags == 'success' %}
+                            <i class="fas fa-check-circle mr-2 text-green-500"></i>
+                            {% elif message.tags == 'error' %}
+                            <i class="fas fa-exclamation-circle mr-2 text-red-500"></i>
+                            {% elif message.tags == 'warning' %}
+                            <i class="fas fa-exclamation-triangle mr-2 text-yellow-500"></i>
+                            {% else %}
+                            <i class="fas fa-info-circle mr-2 text-blue-500"></i>
+                            {% endif %}
+                            {{ message }}
+                        </div>
                     </div>
                 {% endfor %}
             </div>
@@ -185,6 +212,52 @@
     </footer>
     {% endif %}
 
-    {% block extra_js %}{% endblock %}
+    {% block extra_js %}
+    <script>
+        // Mobile sidebar toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            const openBtn = document.getElementById('sidebarToggle');
+            const closeBtn = document.getElementById('sidebarClose');
+
+            function openSidebar() {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeSidebar() {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+                document.body.style.overflow = '';
+            }
+
+            if (openBtn) {
+                openBtn.addEventListener('click', openSidebar);
+            }
+            if (closeBtn) {
+                closeBtn.addEventListener('click', closeSidebar);
+            }
+            if (overlay) {
+                overlay.addEventListener('click', closeSidebar);
+            }
+
+            // Close sidebar on escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeSidebar();
+                }
+            });
+
+            // Auto-close on window resize (if screen becomes large)
+            window.addEventListener('resize', function() {
+                if (window.innerWidth >= 1024) {
+                    closeSidebar();
+                }
+            });
+        });
+    </script>
+    {% endblock %}
 </body>
 </html>
