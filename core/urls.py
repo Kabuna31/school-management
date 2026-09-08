@@ -55,11 +55,12 @@ urlpatterns = [
     
     # Report Cards
     path('report-cards/', views.ReportCardListView.as_view(), name='report_card_list'),
-    path('report-cards/generate/', views.GenerateReportCardsView.as_view(), name='generate_report_cards'),
+    path('report-cards/generate/', views.GenerateReportCardsView.as_view(), name='generate_report_cards'),  # ← ADD THIS LINE
     path('report-cards/<int:card_id>/', views.ReportCardDetailView.as_view(), name='report_card_detail'),
     path('report-cards/<int:card_id>/edit/', views.ReportCardEditView.as_view(), name='report_card_edit'),
     path('report-cards/<int:card_id>/print/', views.ReportCardPrintView.as_view(), name='report_card_print'),
-    path('report-cards/<int:card_id>/delete/', views.ReportCardDeleteView.as_view(), name='report_card_delete'),  # ADD THIS LINE
+    path('report-cards/<int:card_id>/delete/', views.ReportCardDeleteView.as_view(), name='report_card_delete'),
+    path('report-cards/print-all/', views.ReportCardPrintAllView.as_view(), name='report_card_print_all'),
     
     # Performance Analytics
     path('analytics/', views.PerformanceAnalyticsView.as_view(), name='analytics'),
