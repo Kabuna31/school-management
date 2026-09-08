@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 # ---------------------------------------------------------------------------
@@ -542,3 +543,62 @@ class Vote(models.Model):
                     f"You may only vote for {self.position.max_votes_per_voter} "
                     f"candidate(s) for {self.position.title}."
                 )
+
+
+class SchoolSettings(models.Model):
+    """School-specific settings for report cards and branding"""
+    school = models.OneToOneField(School, on_delete=models.CASCADE, related_name='settings')
+    
+    # School Information
+    school_name = models.CharField(max_length=200, blank=True)
+    school_address = models.TextField(blank=True)
+    school_phone = models.CharField(max_length=100, blank=True)
+    school_email = models.EmailField(blank=True)
+    school_website = models.URLField(blank=True)
+    school_logo = models.ImageField(upload_to='school_logos/', blank=True, null=True)
+    school_motto = models.CharField(max_length=200, blank=True)
+    
+    # Report Card Settings
+    report_card_title = models.CharField(max_length=100, default='ACADEMIC REPORT CARD')
+    header_text = models.TextField(blank=True, help_text='Custom header text to appear on report cards')
+    footer_text = models.TextField(blank=True, help_text='Custom footer text to appear on report cards')
+    show_grade_scale = models.BooleanField(default=True)
+    show_teacher_signature = models.BooleanField(default=True)
+    show_head_teacher_signature = models.BooleanField(default=True)
+    
+    # Grade Scale Customization
+    grade_a_min = models.IntegerField(default=80, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    grade_b_min = models.IntegerField(default=70, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    grade_c_min = models.IntegerField(default=60, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    grade_d_min = models.IntegerField(default=50, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    grade_e_min = models.IntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    
+    grade_a_label = models.CharField(max_length=50, default='Exceptional')
+    grade_b_label = models.CharField(max_length=50, default='Outstanding')
+    grade_c_label = models.CharField(max_length=50, default='Satisfactory')
+    grade_d_label = models.CharField(max_length=50, default='Basic')
+    grade_e_label = models.CharField(max_length=50, default='Elementary')
+    
+    # Subject Performance Labels
+    subject_columns = models.JSONField(default=list, blank=True)
+    
+    # Colors & Styling
+    primary_color = models.CharField(max_length=7, default='#1a237e')
+    secondary_color = models.CharField(max_length=7, default='#0d47a1')
+    accent_color = models.CharField(max_length=7, default='#e8eaf6')
+    
+    # Terms
+    term_dates = models.JSONField(default=dict, blank=True)
+    
+    # Custom Fields
+    custom_fields = models.JSONField(default=dict, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"Settings for {self.school.name}"
+    
+    class Meta:
+        verbose_name = "School Settings"
+        verbose_name_plural = "School Settings"
