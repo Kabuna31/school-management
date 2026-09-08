@@ -103,7 +103,7 @@
                     </label>
                     <select name="class_level" id="class_level" class="filter-select">
                         <option value="">All Classes</option>
-                        {% for class in class_levels %}
+                        {% for class in classes %}
                         <option value="{{ class.id }}" {% if request.GET.class_level == class.id|stringformat:"s" %}selected{% endif %}>
                             {{ class.name }}
                         </option>
@@ -137,7 +137,7 @@
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-filter"></i> Apply Filters
                     </button>
-                    <a href="{% url 'report_card_list' %}" class="btn btn-secondary">
+                    <a href="/report-cards/" class="btn btn-secondary">
                         <i class="fas fa-undo"></i> Reset
                     </a>
                 </div>
@@ -151,7 +151,7 @@
         {% if request.GET.term or request.GET.exam or request.GET.class_level or request.GET.stream or request.GET.search %}
         <span class="filter-badge">
             <i class="fas fa-filter"></i> Filters applied
-            <a href="{% url 'report_card_list' %}" class="clear-filters">Clear all</a>
+            <a href="/report-cards/" class="clear-filters">Clear all</a>
         </span>
         {% endif %}
     </div>
@@ -159,33 +159,33 @@
     <!-- Report Cards Grid -->
     {% if report_cards %}
     <div class="report-cards-grid">
-        {% for report in report_cards %}
-        <div class="report-card" data-student="{{ report.student.user.get_full_name }}">
+        {% for card in report_cards %}
+        <div class="report-card" data-student="{{ card.student.user.get_full_name }}">
             <div class="report-card-header">
                 <div class="student-info">
                     <h3>
                         <i class="fas fa-user-graduate"></i> 
-                        {{ report.student.user.get_full_name }}
+                        {{ card.student.user.get_full_name }}
                     </h3>
                     <div class="student-meta">
                         <span class="meta-item">
                             <i class="fas fa-id-card"></i> 
-                            {{ report.student.admission_number }}
+                            {{ card.student.admission_number }}
                         </span>
                         <span class="meta-item">
                             <i class="fas fa-chalkboard-teacher"></i> 
-                            {{ report.student.class_level.name }}
-                            {% if report.student.stream %}- {{ report.student.stream.name }}{% endif %}
+                            {{ card.class_level.name }}
+                            {% if card.stream %}- {{ card.stream.name }}{% endif %}
                         </span>
                         <span class="meta-item">
                             <i class="fas fa-calendar"></i> 
-                            {{ request.GET.term|default:"Current Term" }}
+                            {{ card.term }}
                         </span>
                     </div>
                 </div>
                 <div class="overall-grade">
-                    <span class="grade-circle grade-{{ report.overall_grade|lower }}">
-                        {{ report.overall_grade|default:"-" }}
+                    <span class="grade-circle grade-{{ card.average_score_grade|lower }}">
+                        {{ card.average_score_grade|default:"-" }}
                     </span>
                 </div>
             </div>
@@ -203,16 +203,16 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for mark in report.marks|slice:":5" %}
+                        {% for entry in card.entries.all|slice:":5" %}
                         <tr>
                             <td>{{ forloop.counter }}</td>
-                            <td>{{ mark.subject.name }}</td>
-                            <td>{{ mark.mid_term|default:"-" }}</td>
-                            <td>{{ mark.end_term|default:"-" }}</td>
-                            <td><strong>{{ mark.total_score|default:"-" }}</strong></td>
+                            <td>{{ entry.subject.name }}</td>
+                            <td>{{ entry.mid_term|default:"-" }}</td>
+                            <td>{{ entry.end_term|default:"-" }}</td>
+                            <td><strong>{{ entry.total|default:"-" }}</strong></td>
                             <td>
-                                <span class="grade-badge grade-{{ mark.grade|lower }}">
-                                    {{ mark.grade|default:"-" }}
+                                <span class="grade-badge grade-{{ entry.grade|lower }}">
+                                    {{ entry.grade|default:"-" }}
                                 </span>
                             </td>
                         </tr>
@@ -223,11 +223,11 @@
                             </td>
                         </tr>
                         {% endfor %}
-                        {% if report.marks|length > 5 %}
+                        {% if card.entries.all|length > 5 %}
                         <tr>
                             <td colspan="6" class="more-marks">
                                 <i class="fas fa-ellipsis-h"></i> 
-                                {{ report.marks|length|add:"-5" }} more subject(s)
+                                {{ card.entries.all|length|add:"-5" }} more subject(s)
                             </td>
                         </tr>
                         {% endif %}
@@ -235,28 +235,25 @@
                     <tfoot>
                         <tr>
                             <td colspan="3"><strong>Average</strong></td>
-                            <td><strong>{{ report.average|default:"-" }}</strong></td>
-                            <td><strong>{{ report.overall_grade|default:"-" }}</strong></td>
-                            <td><strong>{{ report.overall_remark|default:"-" }}</strong></td>
+                            <td><strong>{{ card.aggregate_score|default:"-" }}</strong></td>
+                            <td><strong>{{ card.average_score_grade|default:"-" }}</strong></td>
+                            <td><strong>{{ card.general_comment|default:"-" }}</strong></td>
                         </tr>
                     </tfoot>
                 </table>
             </div>
             
             <div class="report-card-footer">
-                <a href="{% url 'report_card_detail' report.student.id %}?term={{ request.GET.term }}&exam={{ request.GET.exam }}" 
-                   class="btn btn-sm btn-primary">
+                <a href="/report-cards/{{ card.id }}/" class="btn btn-sm btn-primary">
                     <i class="fas fa-eye"></i> View Full Report
                 </a>
-                <a href="{% url 'report_card_print' report.student.id %}?term={{ request.GET.term }}&exam={{ request.GET.exam }}" 
-                   class="btn btn-sm btn-secondary" target="_blank">
+                <a href="/report-cards/{{ card.id }}/print/" class="btn btn-sm btn-secondary" target="_blank">
                     <i class="fas fa-print"></i> Print
                 </a>
-                <a href="{% url 'report_card_edit' report.student.id %}?term={{ request.GET.term }}&exam={{ request.GET.exam }}" 
-                   class="btn btn-sm btn-warning" title="Edit Report">
+                <a href="/report-cards/{{ card.id }}/edit/" class="btn btn-sm btn-warning" title="Edit Report">
                     <i class="fas fa-edit"></i>
                 </a>
-                <button class="btn btn-sm btn-danger" onclick="confirmDelete('{{ report.student.id }}')" title="Delete Report">
+                <button class="btn btn-sm btn-danger" onclick="confirmDelete('{{ card.id }}')" title="Delete Report">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -293,26 +290,12 @@
     </div>
     {% endif %}
 
-    <!-- Export Options -->
-    <div class="export-options no-print">
-        <span>Export:</span>
-        <a href="?{{ request.GET.urlencode }}&export=csv" class="btn btn-sm btn-success">
-            <i class="fas fa-file-csv"></i> CSV
-        </a>
-        <a href="?{{ request.GET.urlencode }}&export=excel" class="btn btn-sm btn-success">
-            <i class="fas fa-file-excel"></i> Excel
-        </a>
-        <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-sm btn-success">
-            <i class="fas fa-file-pdf"></i> PDF
-        </a>
-    </div>
-
     {% else %}
     <div class="no-results">
         <i class="fas fa-file-alt" style="font-size: 48px; color: #ccc;"></i>
         <h3>No Report Cards Found</h3>
         <p>Try adjusting your filters or generate new report cards.</p>
-        <a href="{% url 'generate_report_cards' %}" class="btn btn-primary">
+        <a href="/report-cards/generate/" class="btn btn-primary">
             <i class="fas fa-plus-circle"></i> Generate Report Cards
         </a>
     </div>
@@ -335,9 +318,9 @@
     });
 
     // Confirm delete
-    function confirmDelete(studentId) {
+    function confirmDelete(cardId) {
         if (confirm('Are you sure you want to delete this report card? This action cannot be undone.')) {
-            window.location.href = '/report-cards/' + studentId + '/delete/';
+            window.location.href = '/report-cards/' + cardId + '/delete/';
         }
     }
 
@@ -763,25 +746,6 @@
         font-weight: 600;
     }
 
-    /* Export Options */
-    .export-options {
-        margin-top: 20px;
-        padding: 15px 20px;
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-    }
-
-    .export-options span {
-        font-weight: 600;
-        color: #555;
-        margin-right: 5px;
-    }
-
     /* No Results */
     .no-results {
         text-align: center;
@@ -822,7 +786,6 @@
         .report-card-header { flex-direction: column; align-items: flex-start; gap: 10px; }
         .overall-grade { align-self: flex-start; }
         .report-card-footer { justify-content: center; }
-        .export-options { justify-content: center; }
     }
 
     @media (max-width: 480px) {
