@@ -1,112 +1,451 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>Report Card - {{ student.user.get_full_name }}</title>
-    <style>
-        @page { margin: 20mm; }
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-        .report-container { max-width: 100%; }
-        .school-header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 20px; }
-        .school-header h1 { margin: 0; font-size: 24px; }
-        .school-header p { margin: 5px 0; color: #666; }
-        .student-info { margin-bottom: 20px; }
-        .student-info table { width: 100%; }
-        .student-info td { padding: 5px; }
-        .marks-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        .marks-table th { background: #f0f0f0; padding: 8px; text-align: left; border: 1px solid #ddd; }
-        .marks-table td { padding: 8px; border: 1px solid #ddd; }
-        .marks-table tfoot td { font-weight: bold; background: #f9f9f9; }
-        .grade-a { color: green; font-weight: bold; }
-        .grade-b { color: blue; font-weight: bold; }
-        .grade-c { color: orange; font-weight: bold; }
-        .grade-f { color: red; font-weight: bold; }
-        .footer { margin-top: 30px; border-top: 1px solid #ddd; padding-top: 15px; text-align: center; font-size: 12px; color: #666; }
-        .signature { margin-top: 30px; }
-        .signature td { padding: 30px 10px 10px; border-bottom: 1px solid #333; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report Card - Rockland Secondary School</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body { 
+      font-family: 'Times New Roman', Times, serif;
+      margin: 0; 
+      padding: 20px; 
+      color: #333; 
+      background-color: #f0f0f0; 
+    }
+    
+    .report-card { 
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto; 
+      border: 2px solid #000; 
+      padding: 20px; 
+      background-color: #fff;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Header */
+    .header-table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      margin-bottom: 15px;
+    }
+    
+    .school-info { 
+      text-align: center; 
+    }
+    
+    .school-info h1 { 
+      margin: 0; 
+      font-size: 24px; 
+      text-transform: uppercase; 
+      color: #000;
+      letter-spacing: 2px;
+      font-weight: bold;
+    }
+    
+    .school-info p { 
+      margin: 2px 0; 
+      font-size: 12px; 
+    }
+    
+    .school-email, 
+    .school-url { 
+      text-decoration: underline; 
+    }
+    
+    .report-title { 
+      text-align: center; 
+      font-weight: bold; 
+      text-decoration: underline; 
+      margin: 8px 0 5px 0; 
+      font-size: 16px; 
+      text-transform: uppercase;
+    }
+    
+    /* Main Layout */
+    .main-container { 
+      width: 100%; 
+      display: flex; 
+      margin-top: 10px; 
+      gap: 10px;
+    }
+    
+    .left-column { 
+      width: 40%; 
+      padding-right: 10px; 
+    }
+    
+    .right-column { 
+      width: 60%; 
+    }
+    
+    /* Student Info */
+    .student-info { 
+      font-size: 12px; 
+      line-height: 1.8;
+    }
+    
+    .info-line { 
+      margin-bottom: 3px; 
+      padding: 2px 0;
+      border-bottom: 1px dashed #ddd;
+    }
+    
+    .info-line:last-child {
+      border-bottom: none;
+    }
+    
+    .label { 
+      font-weight: bold; 
+      font-size: 12px;
+    }
+    
+    .value {
+      font-weight: normal;
+    }
+    
+    /* Grade Summary */
+    .grade-summary { 
+      width: 100%; 
+      border-collapse: collapse; 
+      margin-top: 15px; 
+      margin-bottom: 15px; 
+      font-size: 9px;
+    }
+    
+    .grade-summary th, 
+    .grade-summary td { 
+      border: 1px solid #000; 
+      padding: 4px 2px; 
+      text-align: center;
+    }
+    
+    .grade-summary th { 
+      background-color: #e8e8e8; 
+      font-weight: bold;
+      font-size: 11px;
+    }
+    
+    .grade-summary .grade-legend {
+      font-size: 8px;
+      font-style: italic;
+    }
+    
+    /* Marks Table */
+    .marks-table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      font-size: 10px; 
+    }
+    
+    .marks-table th, 
+    .marks-table td { 
+      border: 1px solid #000; 
+      padding: 4px 3px; 
+      text-align: center; 
+    }
+    
+    .marks-table th { 
+      background-color: #e8e8e8; 
+      font-weight: bold;
+      font-size: 9px;
+    }
+    
+    .subject-name { 
+      text-align: left; 
+      font-weight: bold; 
+      padding-left: 5px;
+    }
+    
+    .marks-table .subject-row td {
+      padding: 3px 2px;
+    }
+    
+    .marks-table .subject-row:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    
+    .marks-table .total-row td {
+      font-weight: bold;
+      background-color: #e8e8e8;
+      border-top: 2px solid #000;
+    }
+    
+    /* Footer */
+    .footer-info { 
+      font-size: 10px; 
+      margin-top: 15px;
+    }
+    
+    .footer-info div {
+      margin-bottom: 3px;
+    }
+    
+    .signature-container { 
+      text-align: center; 
+      margin-top: 15px;
+    }
+    
+    .stamp-box { 
+      border-top: 1px solid #000; 
+      padding-top: 8px; 
+      font-weight: bold; 
+      font-size: 12px; 
+      text-align: center; 
+      margin-top: 10px;
+      width: 60%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    
+    .invalid-notice { 
+      font-size: 9px; 
+      color: #cc0000; 
+      margin-top: 15px; 
+      text-align: center;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+      border-top: 1px solid #cc0000;
+      padding-top: 10px;
+    }
+    
+    /* Print Styles */
+    @media print {
+      body {
+        background-color: #fff;
+        padding: 0;
+        margin: 0;
+      }
+      
+      .report-card {
+        box-shadow: none;
+        border: 2px solid #000;
+        width: 100%;
+        min-height: 100vh;
+        padding: 15px;
+        margin: 0;
+        border-radius: 0;
+      }
+      
+      .no-print {
+        display: none !important;
+      }
+    }
+    
+    @media screen and (max-width: 700px) {
+      .report-card {
+        width: 100%;
+        min-height: auto;
+        padding: 10px;
+      }
+      
+      .main-container {
+        flex-direction: column;
+      }
+      
+      .left-column,
+      .right-column {
+        width: 100%;
+        padding: 0;
+      }
+      
+      .marks-table {
+        font-size: 9px;
+      }
+      
+      .marks-table th,
+      .marks-table td {
+        padding: 2px;
+      }
+    }
+    
+    /* Utility Classes */
+    .text-center { text-align: center; }
+    .text-uppercase { text-transform: uppercase; }
+    .font-bold { font-weight: bold; }
+    .mt-10 { margin-top: 10px; }
+    .mb-10 { margin-bottom: 10px; }
+  </style>
 </head>
 <body>
-    <div class="report-container">
-        <div class="school-header">
-            <h1>{{ school.name }}</h1>
-            <p>{{ school.address|default:"ROCKLAND SECONDARY SCHOOL" }}</p>
-            <p>Phone: {{ school.phone|default:"N/A" }} | Email: {{ school.email|default:"N/A" }}</p>
-        </div>
-        
+  <div class="report-card" id="reportCard">
+    <!-- Header -->
+    <table class="header-table">
+      <tr>
+        <td style="width: 80px; vertical-align: middle; text-align: center;">
+          <div style="font-size: 40px; font-weight: bold; color: #1a237e;">📚</div>
+        </td>
+        <td class="school-info">
+          <h1>ROCKLAND SECONDARY SCHOOL</h1>
+          <p>P.O. Box 359, IGANGA, UGANDA</p>
+          <p>Tel: +256752378963 / +256779347528 / +256789149601 / +256752616306</p>
+          <p>Email: <span class="school-email">sssrockland@gmail.com</span></p>
+          <p>Website: <span class="school-url">www.rockland.ac.ug</span></p>
+          <div class="report-title">ACADEMIC REPORT CARD</div>
+          <div style="font-size: 14px; font-weight: bold; margin-top: 2px;">
+            TERM {{ term }} - {{ year }}
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- Main Content -->
+    <div class="main-container">
+      <!-- Left Column -->
+      <div class="left-column">
         <div class="student-info">
-            <table>
-                <tr>
-                    <td><strong>Student Name:</strong> {{ student.user.get_full_name }}</td>
-                    <td><strong>Admission Number:</strong> {{ student.admission_number }}</td>
-                </tr>
-                <tr>
-                    <td><strong>Class:</strong> {{ student.class_level.name }}</td>
-                    <td><strong>Stream:</strong> {{ student.stream.name|default:"N/A" }}</td>
-                </tr>
-                <tr>
-                    <td><strong>Term:</strong> {{ term|title }}</td>
-                    <td><strong>Exam:</strong> {{ exam|title }}</td>
-                </tr>
-            </table>
+          <div class="info-line">
+            <span class="label">NAME OF STUDENT:</span> 
+            <span class="value">{{ student_name }}</span>
+          </div>
+          <div class="info-line">
+            <span class="label">CLASS:</span> 
+            <span class="value">{{ class_name }}</span>
+            <span class="label" style="margin-left: 15px;">SEX:</span> 
+            <span class="value">{{ gender }}</span>
+          </div>
+          <div class="info-line">
+            <span class="label">STREAM:</span> 
+            <span class="value">{{ stream }}</span>
+          </div>
+          <div class="info-line">
+            <span class="label">CLASS TEACHER:</span> 
+            <span class="value">{{ class_teacher }}</span>
+          </div>
+          <div class="info-line">
+            <span class="label">COMMENT:</span> 
+            <span class="value">{{ teacher_comment }}</span>
+            <span style="float: right;">SIGN_____</span>
+          </div>
+          <div class="info-line">
+            <span class="label">GENERAL GRADE:</span> 
+            <span class="value" style="font-weight: bold; font-size: 16px;">{{ general_grade }}</span>
+          </div>
+          <div class="info-line">
+            <span class="label">GENERAL COMMENT:</span> 
+            <span class="value">{{ general_comment }}</span>
+          </div>
+          <div class="info-line">
+            <span class="label">HEAD TEACHER'S COMMENT:</span> 
+            <span class="value">{{ head_teacher_comment }}</span>
+          </div>
         </div>
-        
-        <table class="marks-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Subject</th>
-                    <th>Mid Term</th>
-                    <th>End Term</th>
-                    <th>Total</th>
-                    <th>Grade</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for mark in marks %}
-                <tr>
-                    <td>{{ forloop.counter }}</td>
-                    <td>{{ mark.subject.name }}</td>
-                    <td>{{ mark.mid_term|default:"-" }}</td>
-                    <td>{{ mark.end_term|default:"-" }}</td>
-                    <td><strong>{{ mark.total_score|default:"-" }}</strong></td>
-                    <td class="grade-{{ mark.grade|lower }}">{{ mark.grade|default:"-" }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="6" style="text-align:center; padding:20px; color:#999;">No marks recorded</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                <tr>
-                    <td colspan="3"><strong>Average Score</strong></td>
-                    <td colspan="3"><strong>{{ average|default:"-" }}</strong></td>
-                </tr>
-                <tr>
-                    <td colspan="3"><strong>Overall Grade</strong></td>
-                    <td colspan="3"><strong>{{ overall_grade|default:"-" }}</strong></td>
-                </tr>
-            </tfoot>
+
+        <!-- Grade Summary -->
+        <table class="grade-summary">
+          <thead>
+            <tr>
+              <th>GRADE</th>
+              <th>A</th>
+              <th>B</th>
+              <th>C</th>
+              <th>D</th>
+              <th>E</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>SCORE</strong></td>
+              <td>80 - 100</td>
+              <td>70 - 79</td>
+              <td>60 - 69</td>
+              <td>50 - 59</td>
+              <td>0 - 49</td>
+            </tr>
+            <tr>
+              <td><strong>DESCRIPTION</strong></td>
+              <td>Exceptional</td>
+              <td>Outstanding</td>
+              <td>Satisfactory</td>
+              <td>Basic</td>
+              <td>Elementary</td>
+            </tr>
+          </tbody>
         </table>
-        
-        <div class="signature">
-            <table style="width:100%;">
-                <tr>
-                    <td style="text-align:center;"><strong>Class Teacher</strong></td>
-                    <td style="text-align:center;"><strong>Head Teacher</strong></td>
-                </tr>
-                <tr>
-                    <td style="text-align:center; padding-top:40px;">_________________</td>
-                    <td style="text-align:center; padding-top:40px;">_________________</td>
-                </tr>
-            </table>
+
+        <!-- Footer Info -->
+        <div class="footer-info">
+          <div>
+            <strong>THIS TERM HAS ENDED ON:</strong> 
+            {{ term_end_date }}
+          </div>
+          <div>
+            <strong>NEXT TERM BEGINS ON:</strong> 
+            {{ next_term_start }}
+          </div>
+          <div><strong>SIGN/STAMP:</strong></div>
+          <div class="signature-container">
+            <div style="height: 30px; border-bottom: 1px solid #000; margin: 0 20px;"></div>
+            <div class="stamp-box">HEAD TEACHER / STAMP</div>
+          </div>
         </div>
-        
-        <div class="footer">
-            <p>Generated on: {% now "F j, Y H:i" %}</p>
-            <p>This is a computer-generated report card. Please verify all entries.</p>
-        </div>
+      </div>
+
+      <!-- Right Column: Marks Table -->
+      <div class="right-column">
+        <table class="marks-table">
+          <thead>
+            <tr>
+              <th class="subject-name">SUBJECT</th>
+              <th>AOI<br><small>(20%)</small></th>
+              <th>EOT<br><small>(80%)</small></th>
+              <th>FS<br><small>(100%)</small></th>
+              <th>GRADE</th>
+              <th>LOA</th>
+              <th>TR</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Subject rows - generated from data -->
+            {% for subject in subjects %}
+            <tr class="subject-row">
+              <td class="subject-name">{{ subject.name }}</td>
+              <td>{{ subject.aoi|default:"-" }}</td>
+              <td>{{ subject.eot|default:"-" }}</td>
+              <td>{{ subject.total|default:"-" }}</td>
+              <td><strong>{{ subject.grade|default:"-" }}</strong></td>
+              <td>{{ subject.loa|default:"-" }}</td>
+              <td>{{ subject.tr|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+            
+            <!-- Totals Row -->
+            <tr class="total-row">
+              <td><strong>TOTALS</strong></td>
+              <td></td>
+              <td></td>
+              <td><strong>{{ total_score|default:"-" }}</strong></td>
+              <td><strong>{{ general_grade|default:"-" }}</strong></td>
+              <td></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
+
+    <!-- Invalid Notice -->
+    <div class="invalid-notice">
+      *** This report card is invalid without the official stamp of Rockland Secondary School. ***
+    </div>
+  </div>
+
+  <!-- Print Button (visible only on screen) -->
+  <div class="no-print" style="text-align: center; margin-top: 20px;">
+    <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px; cursor: pointer; background: #1a237e; color: white; border: none; border-radius: 5px;">
+      🖨️ Print Report Card
+    </button>
+  </div>
+
+  <script>
+    // Auto-print when loaded (optional - remove if not needed)
+    // window.onload = function() { window.print(); }
+  </script>
 </body>
 </html>

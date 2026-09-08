@@ -1175,20 +1175,117 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
         ctx = super().get_context_data(**kwargs)
         school = self.get_school()
         card_id = self.kwargs.get("card_id")
+        
+        # Get the report card with related data
         card = get_object_or_404(
-            ReportCard.objects.select_related("student", "student__user", "class_level", "stream"),
-            pk=card_id, school=school,
+            ReportCard.objects.select_related(
+                "student", 
+                "student__user", 
+                "class_level", 
+                "stream",
+                "generated_by"
+            ),
+            pk=card_id, 
+            school=school,
         )
+        
+        # Get entries with subject data
         entries = card.entries.select_related("subject").order_by("subject__name")
+        
+        # Prepare subject data for the table
+        subjects = []
+        total_score = 0
+        subject_count = 0
+        
         for entry in entries:
-            entry.total = (entry.mid_term or 0) + (entry.end_term or 0)
-            entry.grade = entry.grade
-
+            # Calculate total score (mid_term + end_term)
+            entry_total = (entry.mid_term or 0) + (entry.end_term or 0)
+            total_score += entry_total
+            subject_count += 1
+            
+            # Get grade for this subject
+            grade = entry.grade  # This uses the @property from your model
+            
+            subjects.append({
+                'name': entry.subject.name,
+                'aoi': entry.mid_term if entry.mid_term is not None else '-',
+                'eot': entry.end_term if entry.end_term is not None else '-',
+                'total': entry_total,
+                'grade': grade,
+                'loa': self._get_loa(grade),  # Level of Achievement
+                'tr': '-',  # Teacher Remark (you can add this field)
+            })
+        
+        # Calculate overall average
+        average_score = total_score / subject_count if subject_count > 0 else 0
+        general_grade = self._get_grade_letter(average_score)
+        
+        # Get student gender (you may need to add this field to User or StudentProfile)
+        gender = 'M'  # Default, you can add a gender field
+        
+        # Get class teacher (you may need to add this relationship)
+        class_teacher = 'Mr./Ms. Teacher'  # You can fetch this from ClassLevel model
+        
+        # Get term display
+        term_display = card.term.replace('Term ', '') if card.term else 'TWO'
+        
+        # Context data
         ctx["card"] = card
-        ctx["entries"] = entries
         ctx["school"] = school
+        ctx["student_name"] = card.student.user.get_full_name() or card.student.user.username
+        ctx["class_name"] = card.class_level.name if card.class_level else 'N/A'
+        ctx["stream"] = card.stream.name if card.stream else 'N/A'
+        ctx["gender"] = gender
+        ctx["class_teacher"] = class_teacher
+        ctx["teacher_comment"] = card.teacher_comment or 'No comment'
+        ctx["general_grade"] = general_grade
+        ctx["general_comment"] = self._get_general_comment(average_score)
+        ctx["head_teacher_comment"] = card.headteacher_remark or 'No remark'
+        ctx["subjects"] = subjects
+        ctx["total_score"] = total_score
+        ctx["term"] = term_display
+        ctx["year"] = '2026'  # You can make this dynamic
+        ctx["term_end_date"] = '21ST - AUG - 2026'  # You can make this dynamic
+        ctx["next_term_start"] = '2ND - SEP - 2026'  # You can make this dynamic
+        
         return ctx
-
+    
+    def _get_grade_letter(self, score):
+        """Convert score to grade letter"""
+        if score >= 80:
+            return 'A'
+        elif score >= 70:
+            return 'B'
+        elif score >= 60:
+            return 'C'
+        elif score >= 50:
+            return 'D'
+        else:
+            return 'E'
+    
+    def _get_loa(self, grade):
+        """Get Level of Achievement based on grade"""
+        loa_map = {
+            'A': 'Exceptional',
+            'B': 'Outstanding',
+            'C': 'Satisfactory',
+            'D': 'Basic',
+            'E': 'Elementary',
+        }
+        return loa_map.get(grade, '-')
+    
+    def _get_general_comment(self, score):
+        """Get general comment based on score"""
+        if score >= 80:
+            return 'Excellent performance. Keep up the good work!'
+        elif score >= 70:
+            return 'Very good performance. Continue striving for excellence.'
+        elif score >= 60:
+            return 'Good performance. Room for improvement.'
+        elif score >= 50:
+            return 'Average performance. More effort needed.'
+        else:
+            return 'Needs improvement. Please work harder.'
 
 class ReportCardDeleteView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
     required_roles = MARK_MANAGE_ROLES
