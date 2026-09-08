@@ -1134,16 +1134,14 @@ class ReportCardDetailView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMi
                 return HttpResponseForbidden("You can only view your children's report cards.")
 
         entries = card.entries.select_related("subject").order_by("subject__name")
-        for entry in entries:
-            entry.total = (entry.mid_term or 0) + (entry.end_term or 0)
-            entry.grade = entry.grade
-            entry.grade_points = entry.grade_points
+        
+        # Don't assign to entry.total - just pass entries to template
+        # The template will calculate total using add filter
 
         ctx["card"] = card
         ctx["entries"] = entries
         ctx["terms"] = [t[0] for t in TERM_CHOICES]
         return ctx
-
 
 class ReportCardEditView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
     template_name = "core/reports/report_card_edit.html"
