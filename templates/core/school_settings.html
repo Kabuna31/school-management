@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}School Settings{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 max-w-5xl">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 flex items-center">
+            <i class="fas fa-cog text-blue-600 mr-3"></i>
+            School Settings
+        </h1>
+        <p class="text-gray-600">Customize your school's report card template and branding</p>
+    </div>
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <!-- School Information -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fas fa-building text-blue-500 mr-2"></i>
+                School Information
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">School Name</label>
+                    {{ form.school_name }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">School Motto</label>
+                    {{ form.school_motto }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    {{ form.school_phone }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    {{ form.school_email }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Website</label>
+                    {{ form.school_website }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                    {{ form.school_address }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Card Settings -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fas fa-file-alt text-blue-500 mr-2"></i>
+                Report Card Settings
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Report Card Title</label>
+                    {{ form.report_card_title }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">School Logo</label>
+                    {{ form.school_logo }}
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Header Text</label>
+                    {{ form.header_text }}
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Footer Text</label>
+                    {{ form.footer_text }}
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                <div class="flex items-center">
+                    {{ form.show_grade_scale }}
+                    <label class="ml-2 text-sm text-gray-700">Show Grade Scale</label>
+                </div>
+                <div class="flex items-center">
+                    {{ form.show_teacher_signature }}
+                    <label class="ml-2 text-sm text-gray-700">Show Teacher Signature</label>
+                </div>
+                <div class="flex items-center">
+                    {{ form.show_head_teacher_signature }}
+                    <label class="ml-2 text-sm text-gray-700">Show Head Teacher Signature</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grade Scale -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fas fa-graduation-cap text-blue-500 mr-2"></i>
+                Grade Scale
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">A (Min)</label>
+                    {{ form.grade_a_min }}
+                    <label class="block text-sm font-medium text-gray-700 mt-2">A Label</label>
+                    {{ form.grade_a_label }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">B (Min)</label>
+                    {{ form.grade_b_min }}
+                    <label class="block text-sm font-medium text-gray-700 mt-2">B Label</label>
+                    {{ form.grade_b_label }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">C (Min)</label>
+                    {{ form.grade_c_min }}
+                    <label class="block text-sm font-medium text-gray-700 mt-2">C Label</label>
+                    {{ form.grade_c_label }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">D (Min)</label>
+                    {{ form.grade_d_min }}
+                    <label class="block text-sm font-medium text-gray-700 mt-2">D Label</label>
+                    {{ form.grade_d_label }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">E (Min)</label>
+                    {{ form.grade_e_min }}
+                    <label class="block text-sm font-medium text-gray-700 mt-2">E Label</label>
+                    {{ form.grade_e_label }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Colors & Styling -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fas fa-palette text-blue-500 mr-2"></i>
+                Colors & Styling
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Primary Color</label>
+                    {{ form.primary_color }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Secondary Color</label>
+                    {{ form.secondary_color }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Accent Color</label>
+                    {{ form.accent_color }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fas fa-eye text-blue-500 mr-2"></i>
+                Preview
+            </h2>
+            <button type="button" onclick="previewReportCard()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition duration-200">
+                <i class="fas fa-eye mr-2"></i> Preview Report Card
+            </button>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex gap-3">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition duration-200 flex items-center gap-2">
+                <i class="fas fa-save"></i> Save Settings
+            </button>
+            <a href="{% url 'core:role_redirect' %}" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition duration-200">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
+
+<script>
+function previewReportCard() {
+    // Get all form values
+    const form = document.querySelector('form');
+    const formData = new FormData(form);
+    
+    // Build preview URL with query parameters
+    const params = new URLSearchParams();
+    for (const [key, value] of formData.entries()) {
+        if (value) params.append(key, value);
+    }
+    
+    // Open preview in new window
+    window.open(`/report-cards/preview/?${params.toString()}`, '_blank', 'width=800,height=600');
+}
+</script>
+
+<style>
+    /* Color picker styling */
+    input[type="color"] {
+        padding: 2px;
+        height: 50px;
+        cursor: pointer;
+    }
+    
+    /* Form styling */
+    .form-checkbox {
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: 0.25rem;
+        border: 2px solid #d1d5db;
+        cursor: pointer;
+    }
+    
+    .form-checkbox:checked {
+        background-color: #3b82f6;
+        border-color: #3b82f6;
+    }
+</style>
+{% endblock %}
