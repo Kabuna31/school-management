@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Report Cards{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 flex items-center">
+            <i class="fas fa-plus-circle text-blue-600 mr-3"></i>
+            Generate Report Cards
+        </h1>
+        <p class="text-gray-600 mt-1">Generate report cards for all students in a class for a specific term</p>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm p-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            
+            <!-- Class Selection -->
+            <div>
+                <label for="class_level" class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-chalkboard mr-2 text-blue-500"></i>
+                    Select Class
+                </label>
+                <select name="class_level" id="class_level" required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                    <option value="">-- Select Class --</option>
+                    {% for class in classes %}
+                    <option value="{{ class.id }}">{{ class.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Term Selection -->
+            <div>
+                <label for="term" class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-calendar-alt mr-2 text-blue-500"></i>
+                    Select Term
+                </label>
+                <select name="term" id="term" required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                    <option value="">-- Select Term --</option>
+                    {% for term in terms %}
+                    <option value="{{ term }}">{{ term }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Info Box -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div class="flex items-start">
+                    <i class="fas fa-info-circle text-blue-500 mt-1 mr-3"></i>
+                    <div>
+                        <p class="text-sm text-blue-800 font-medium">What will happen?</p>
+                        <ul class="text-sm text-blue-700 mt-1 space-y-1">
+                            <li>• Report cards will be generated for ALL students in the selected class</li>
+                            <li>• Only students with existing marks will get report cards</li>
+                            <li>• Existing report cards will be updated with new data</li>
+                            <li>• You can view and print report cards after generation</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center space-x-4 pt-4 border-t border-gray-200">
+                <button type="submit" 
+                        class="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium py-2.5 px-6 rounded-lg transition duration-200 flex items-center">
+                    <i class="fas fa-sync-alt mr-2"></i>
+                    Generate Report Cards
+                </button>
+                <a href="{% url 'core:report_card_list' %}" 
+                   class="text-gray-600 hover:text-gray-800 font-medium py-2.5 px-4 rounded-lg transition duration-200">
+                    <i class="fas fa-arrow-left mr-1"></i>
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Instructions -->
+    <div class="mt-6 bg-white rounded-xl shadow-sm p-6">
+        <h3 class="text-lg font-semibold text-gray-800 flex items-center mb-4">
+            <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>
+            Instructions
+        </h3>
+        <div class="space-y-3 text-gray-600">
+            <div class="flex items-start">
+                <span class="bg-blue-100 text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 flex-shrink-0">1</span>
+                <p>Select a <strong>Class</strong> from the dropdown menu</p>
+            </div>
+            <div class="flex items-start">
+                <span class="bg-blue-100 text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 flex-shrink-0">2</span>
+                <p>Select a <strong>Term</strong> (e.g., Term 1, Term 2, Term 3)</p>
+            </div>
+            <div class="flex items-start">
+                <span class="bg-blue-100 text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 flex-shrink-0">3</span>
+                <p>Click <strong>Generate Report Cards</strong> to create report cards for all students</p>
+            </div>
+            <div class="flex items-start">
+                <span class="bg-blue-100 text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 flex-shrink-0">4</span>
+                <p>After generation, you'll be redirected to the <strong>Report Cards List</strong> where you can view and print them</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
