@@ -1,6 +1,6 @@
 from django.db.models import Avg, Count, Sum, F, Q, ExpressionWrapper, FloatField, Max, Min
 from django.db.models.functions import Coalesce
-from .models import Mark, StudentProfile, ClassLevel, Subject, School
+from .models import Mark, StudentProfile, ClassLevel, Subject, School, Stream
 from .helpers import mark_average, grade_letter, grade_points
 from collections import defaultdict
 import json
@@ -80,6 +80,20 @@ class ReportGenerator:
     
     def class_performance_report(self):
         """Generate class-wide performance report"""
+        # Convert class_level ID to object if needed
+        if self.class_level and isinstance(self.class_level, int):
+            try:
+                self.class_level = ClassLevel.objects.get(id=self.class_level)
+            except ClassLevel.DoesNotExist:
+                self.class_level = None
+        
+        # Convert stream ID to object if needed
+        if self.stream and isinstance(self.stream, int):
+            try:
+                self.stream = Stream.objects.get(id=self.stream)
+            except Stream.DoesNotExist:
+                self.stream = None
+        
         marks = self.get_marks_queryset()
         
         if not marks.exists():
@@ -132,8 +146,14 @@ class ReportGenerator:
         for class_id in classes:
             class_marks = marks.filter(student__class_level_id=class_id)
             class_avg = mark_average(class_marks)
+            # Get class name
+            try:
+                class_obj = ClassLevel.objects.get(id=class_id)
+                class_name = class_obj.name
+            except ClassLevel.DoesNotExist:
+                class_name = f"Class {class_id}"
             class_stats.append({
-                'class_name': class_marks.first().student.class_level.name,
+                'class_name': class_name,
                 'students': class_marks.values('student').distinct().count(),
                 'average': class_avg,
                 'pass_rate': self._pass_rate(class_marks),
@@ -168,8 +188,14 @@ class ReportGenerator:
         for class_id in classes:
             class_marks = marks.filter(student__class_level_id=class_id)
             class_avg = mark_average(class_marks)
+            # Get class name
+            try:
+                class_obj = ClassLevel.objects.get(id=class_id)
+                class_name = class_obj.name
+            except ClassLevel.DoesNotExist:
+                class_name = f"Class {class_id}"
             class_stats.append({
-                'class_name': class_marks.first().student.class_level.name,
+                'class_name': class_name,
                 'students': class_marks.values('student').distinct().count(),
                 'average': class_avg,
             })
