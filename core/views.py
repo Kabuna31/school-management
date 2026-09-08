@@ -936,15 +936,22 @@ class ReportCardListView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        
+        # Get school - handle system admin case
         school = self.get_school()
-        if not school:
-            return ctx
-
-        cards = ReportCard.objects.filter(school=school).select_related(
-            "student", "student__user", "class_level", "stream"
-        ).order_by("term", "student__user__first_name")
-
         user = self.request.user
+        
+        # If user is system admin or superuser, show all report cards
+        if user.is_superuser or user.role == 'system_admin':
+            cards = ReportCard.objects.all().select_related(
+                "student", "student__user", "class_level", "stream"
+            ).order_by("term", "student__user__first_name")
+        else:
+            if not school:
+                return ctx
+            cards = ReportCard.objects.filter(school=school).select_related(
+                "student", "student__user", "class_level", "stream"
+            ).order_by("term", "student__user__first_name")
 
         # Narrow the list for non-management roles
         if user.role == 'student':
@@ -990,15 +997,23 @@ class ReportCardListView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
         ctx["paginator"] = paginator
 
         ctx["terms"] = [t[0] for t in TERM_CHOICES]
-        ctx["classes"] = ClassLevel.objects.filter(school=school)
-        ctx["streams"] = Stream.objects.filter(school=school)
+        
+        # Get classes and streams based on user role
+        if user.is_superuser or user.role == 'system_admin':
+            ctx["classes"] = ClassLevel.objects.all()
+            ctx["streams"] = Stream.objects.all()
+            ctx["total_students"] = StudentProfile.objects.count()
+            ctx["total_subjects"] = Subject.objects.count()
+            ctx["avg_score"] = mark_average(Mark.objects.all())
+        else:
+            ctx["classes"] = ClassLevel.objects.filter(school=school)
+            ctx["streams"] = Stream.objects.filter(school=school)
+            ctx["total_students"] = StudentProfile.objects.filter(school=school).count()
+            ctx["total_subjects"] = Subject.objects.filter(school=school).count()
+            ctx["avg_score"] = mark_average(Mark.objects.filter(school=school))
+        
         ctx["selected_term"] = term
         ctx["selected_class"] = class_id
-        
-        # Add stats for the dashboard
-        ctx["total_students"] = StudentProfile.objects.filter(school=school).count()
-        ctx["total_subjects"] = Subject.objects.filter(school=school).count()
-        ctx["avg_score"] = mark_average(Mark.objects.filter(school=school))
         
         return ctx
 
@@ -1094,10 +1109,18 @@ class ReportCardDetailView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMi
         ctx = super().get_context_data(**kwargs)
         school = self.get_school()
         card_id = self.kwargs.get("card_id")
-        card = get_object_or_404(
-            ReportCard.objects.select_related("student", "student__user", "class_level", "stream"),
-            pk=card_id, school=school,
-        )
+        
+        # Handle system admin case
+        if self.request.user.is_superuser or self.request.user.role == 'system_admin':
+            card = get_object_or_404(
+                ReportCard.objects.select_related("student", "student__user", "class_level", "stream"),
+                pk=card_id,
+            )
+        else:
+            card = get_object_or_404(
+                ReportCard.objects.select_related("student", "student__user", "class_level", "stream"),
+                pk=card_id, school=school,
+            )
 
         user = self.request.user
         if user.role == 'student':
@@ -1128,9 +1151,14 @@ class ReportCardEditView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
 
     def get(self, request, card_id):
         school = self.get_school()
-        if not school:
+        if not school and not request.user.is_superuser:
             return HttpResponseForbidden("You are not associated with a school.")
-        card = get_object_or_404(ReportCard, pk=card_id, school=school)
+        
+        if request.user.is_superuser or request.user.role == 'system_admin':
+            card = get_object_or_404(ReportCard, pk=card_id)
+        else:
+            card = get_object_or_404(ReportCard, pk=card_id, school=school)
+        
         ctx = {
             "card": card,
             "entries": card.entries.select_related("subject").order_by("subject__name"),
@@ -1139,9 +1167,13 @@ class ReportCardEditView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
 
     def post(self, request, card_id):
         school = self.get_school()
-        if not school:
+        if not school and not request.user.is_superuser:
             return HttpResponseForbidden("You are not associated with a school.")
-        card = get_object_or_404(ReportCard, pk=card_id, school=school)
+        
+        if request.user.is_superuser or request.user.role == 'system_admin':
+            card = get_object_or_404(ReportCard, pk=card_id)
+        else:
+            card = get_object_or_404(ReportCard, pk=card_id, school=school)
 
         card.teacher_comment = request.POST.get("teacher_comment", card.teacher_comment)
         card.headteacher_remark = request.POST.get("headteacher_remark", card.headteacher_remark)
@@ -1181,19 +1213,32 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
         ctx = super().get_context_data(**kwargs)
         school = self.get_school()
         card_id = self.kwargs.get("card_id")
+        user = self.request.user
         
-        # Get the report card with related data
-        card = get_object_or_404(
-            ReportCard.objects.select_related(
-                "student", 
-                "student__user", 
-                "class_level", 
-                "stream",
-                "generated_by"
-            ),
-            pk=card_id, 
-            school=school,
-        )
+        # Handle system admin case
+        if user.is_superuser or user.role == 'system_admin':
+            card = get_object_or_404(
+                ReportCard.objects.select_related(
+                    "student", 
+                    "student__user", 
+                    "class_level", 
+                    "stream",
+                    "generated_by"
+                ),
+                pk=card_id,
+            )
+        else:
+            card = get_object_or_404(
+                ReportCard.objects.select_related(
+                    "student", 
+                    "student__user", 
+                    "class_level", 
+                    "stream",
+                    "generated_by"
+                ),
+                pk=card_id, 
+                school=school,
+            )
         
         # Get entries with subject data
         entries = card.entries.select_related("subject").order_by("subject__name")
@@ -1299,10 +1344,15 @@ class ReportCardDeleteView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMi
 
     def post(self, request, card_id):
         school = self.get_school()
-        if not school:
-            return HttpResponseForbidden("You are not associated with a school.")
+        user = self.request.user
+        
+        if user.is_superuser or user.role == 'system_admin':
+            card = get_object_or_404(ReportCard, pk=card_id)
+        else:
+            if not school:
+                return HttpResponseForbidden("You are not associated with a school.")
+            card = get_object_or_404(ReportCard, pk=card_id, school=school)
 
-        card = get_object_or_404(ReportCard, pk=card_id, school=school)
         student_name = card.student.user.get_full_name()
         term = card.term
 
@@ -1321,13 +1371,20 @@ class ReportCardPrintAllView(LoginRequiredMixin, RoleRequiredMixin, SchoolScoped
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         school = self.get_school()
+        user = self.request.user
         
         # Get filters from request
         class_id = self.request.GET.get('class')
         term = self.request.GET.get('term')
         
-        # Get report cards
-        cards = ReportCard.objects.filter(school=school)
+        # Get report cards - handle system admin
+        if user.is_superuser or user.role == 'system_admin':
+            cards = ReportCard.objects.all()
+        else:
+            if not school:
+                return ctx
+            cards = ReportCard.objects.filter(school=school)
+        
         if class_id:
             cards = cards.filter(class_level_id=class_id)
         if term:
@@ -1341,13 +1398,15 @@ class ReportCardPrintAllView(LoginRequiredMixin, RoleRequiredMixin, SchoolScoped
         
         # Get class name
         if class_id:
-            class_level = get_object_or_404(ClassLevel, pk=class_id, school=school)
+            if user.is_superuser or user.role == 'system_admin':
+                class_level = get_object_or_404(ClassLevel, pk=class_id)
+            else:
+                class_level = get_object_or_404(ClassLevel, pk=class_id, school=school)
             ctx['class_name'] = class_level.name
         else:
             ctx['class_name'] = 'All Classes'
         
         return ctx
-
 
 # ============================================================
 # Performance Analytics View
