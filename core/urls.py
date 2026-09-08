@@ -8,7 +8,7 @@ urlpatterns = [
     # Authentication & Home
     path('', views.RoleRedirectView.as_view(), name='role_redirect'),
     path('login/', views.CustomLoginView.as_view(), name='login'),
-    path('logout/', LogoutView.as_view(next_page='core:login'), name='logout'),
+    path('logout/', views.custom_logout, name='logout'),
     
     # Dashboards
     path('dashboard/superuser/', views.SuperuserDashboardView.as_view(), name='superuser_dashboard'),

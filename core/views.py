@@ -1405,3 +1405,15 @@ class PrintMarksheetView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
             ctx['term'] = term
 
         return ctx
+
+from django.contrib.auth import logout as auth_logout
+
+def custom_logout(request):
+    """Custom logout view that handles both GET and POST requests"""
+    if request.method == 'POST':
+        auth_logout(request)
+        messages.success(request, "You have been logged out successfully.")
+    else:
+        # Handle GET requests gracefully
+        auth_logout(request)
+    return redirect('core:login')
