@@ -1,7 +1,7 @@
-from django.db.models import Avg, Count, Sum, F, Q, ExpressionWrapper, FloatField
+from django.db.models import Avg, Count, Sum, F, Q, ExpressionWrapper, FloatField, Max, Min
 from django.db.models.functions import Coalesce
 from .models import Mark, StudentProfile, ClassLevel, Subject, School
-from .helpers import mark_average, grade_letter, grade_points  # Change this line
+from .helpers import mark_average, grade_letter, grade_points
 from collections import defaultdict
 import json
 
@@ -102,8 +102,8 @@ class ReportGenerator:
                 'subject': subject_marks.first().subject.name,
                 'average': subject_avg,
                 'student_count': subject_marks.values('student').distinct().count(),
-                'highest': subject_marks.aggregate(highest=Coalesce(F('mid_term') + F('end_term'), 0, output_field=FloatField())).get('highest', 0),
-                'lowest': subject_marks.aggregate(lowest=Coalesce(F('mid_term') + F('end_term'), 0, output_field=FloatField())).get('lowest', 0),
+                'highest': subject_marks.aggregate(highest=Max(Coalesce(F('mid_term') + F('end_term'), 0, output_field=FloatField()))).get('highest', 0),
+                'lowest': subject_marks.aggregate(lowest=Min(Coalesce(F('mid_term') + F('end_term'), 0, output_field=FloatField()))).get('lowest', 0),
             })
         
         # Grade distribution
@@ -179,8 +179,8 @@ class ReportGenerator:
             'subject_code': subject.code,
             'total_students': marks.values('student').distinct().count(),
             'overall_average': mark_average(marks),
-            'highest': marks.annotate(total=Coalesce(F('mid_term') + F('end_term'), 0, output_field=FloatField())).order_by('-total').first(),
-            'lowest': marks.annotate(total=Coalesce(F('mid_term') + F('end_term'), 0, output_field=FloatField())).order_by('total').first(),
+            'highest': marks.aggregate(highest=Max(F('mid_term') + F('end_term'))).get('highest', 0),
+            'lowest': marks.aggregate(lowest=Min(F('mid_term') + F('end_term'))).get('lowest', 0),
             'class_stats': class_stats,
             'grade_distribution': self._grade_distribution(marks),
         }
