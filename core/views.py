@@ -4,6 +4,8 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.template.response import TemplateResponse
+from .forms import SchoolSettingsForm
+from .models import SchoolSettings
 from django.db.models import (
     Avg,
     Count,
@@ -1621,3 +1623,46 @@ def custom_logout(request):
         # Handle GET requests gracefully
         auth_logout(request)
     return redirect('core:login')
+
+
+
+class SchoolSettingsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    template_name = "core/school_settings.html"
+    required_roles = ['system_admin', 'school_admin']
+
+    def get(self, request):
+        school = self.get_school()
+        if not school:
+            messages.error(request, "No school associated with your account.")
+            return redirect('core:role_redirect')
+        
+        settings, created = SchoolSettings.objects.get_or_create(school=school)
+        form = SchoolSettingsForm(instance=settings)
+        
+        return render(request, self.template_name, {
+            'form': form,
+            'settings': settings,
+            'school': school
+        })
+
+    def post(self, request):
+        school = self.get_school()
+        if not school:
+            messages.error(request, "No school associated with your account.")
+            return redirect('core:role_redirect')
+        
+        settings, created = SchoolSettings.objects.get_or_create(school=school)
+        form = SchoolSettingsForm(request.POST, request.FILES, instance=settings)
+        
+        if form.is_valid():
+            form.save()
+            messages.success(request, "School settings updated successfully!")
+            return redirect('core:school_settings')
+        else:
+            messages.error(request, "Please correct the errors below.")
+        
+        return render(request, self.template_name, {
+            'form': form,
+            'settings': settings,
+            'school': school
+        })

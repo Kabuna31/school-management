@@ -76,7 +76,9 @@ urlpatterns = [
     path('report-cards/<int:card_id>/delete/', views.ReportCardDeleteView.as_view(), name='report_card_delete'),
     path('report-cards/print-all/', views.ReportCardPrintAllView.as_view(), name='report_card_print_all'),  # ← ADD THIS
     path('report-cards/generate/', views.GenerateReportCardsView.as_view(), name='generate_report_cards'),
-path('report-cards/', views.ReportCardListView.as_view(), name='report_card_list'),
+    # School Settings
+    path('settings/', views.SchoolSettingsView.as_view(), name='school_settings'),
+    path('report-cards/', views.ReportCardListView.as_view(), name='report_card_list'),
     # ============================================================
     # Performance Analytics
     # ============================================================
