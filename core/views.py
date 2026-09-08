@@ -42,19 +42,6 @@ from .models import (
     MARK_MANAGE_ROLES,
     MARK_ENTRY_ROLES,
 )
-from django.db.models import (
-    Avg,
-    Count,
-    F,
-    FloatField,
-    ExpressionWrapper,
-    Sum,
-    Q,
-    Case,
-    When,
-    Value,
-    CharField,
-)
 from .helpers import total_expr, mark_average, grade_letter, grade_points
 from .reports import ReportGenerator
 
@@ -947,33 +934,16 @@ class PerformanceAnalyticsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScop
         total_marks = marks.count()
         avg_score = mark_average(marks)
 
-        # 'grade' is a Python @property on Mark, not a DB field, so it can't
-        # be used in .values()/.annotate() directly. Compute the grade bucket
-        # in the database instead, using the same total_score thresholds.
-        marks_with_grade = marks.annotate(
-            total_score=ExpressionWrapper(
-                F('mid_term') + F('end_term'), output_field=FloatField()
-            )
-        ).annotate(
-            grade_calc=Case(
-                When(total_score__gte=80, then=Value('A')),
-                When(total_score__gte=70, then=Value('B')),
-                When(total_score__gte=60, then=Value('C')),
-                When(total_score__gte=50, then=Value('D')),
-                default=Value('E'),
-                output_field=CharField(max_length=1),
-            )
-        )
-
+        # Use DB aggregation instead of loading all marks into Python
         grade_counts = (
-            marks_with_grade.values('grade_calc')
+            marks.values('grade')
             .annotate(count=Count('id'))
-            .order_by('grade_calc')
+            .order_by('grade')
         )
 
         grade_dist = {}
         for row in grade_counts:
-            grade = row['grade_calc']
+            grade = row['grade']
             count = row['count']
             if grade:
                 grade_dist[grade] = {
