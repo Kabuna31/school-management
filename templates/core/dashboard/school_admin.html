@@ -16,7 +16,13 @@
                 <i class="fas fa-user mr-1 ml-2"></i> {{ request.user.get_full_name|default:request.user.username }}
             </p>
         </div>
-        <div class="mt-3 md:mt-0">
+        <div class="mt-3 md:mt-0 flex items-center gap-3">
+            <!-- Settings Button -->
+            <a href="{% url 'core:school_settings' %}" 
+               class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition duration-200">
+                <i class="fas fa-cog mr-2"></i>
+                Settings
+            </a>
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
                 <i class="fas fa-circle text-green-500 text-xs mr-2"></i>
                 Active Session
@@ -90,7 +96,7 @@
 
 <!-- Quick Access Cards -->
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-    <!-- Report Cards - Using hardcoded URL -->
+    <!-- Report Cards -->
     <a href="/report-cards/" 
        class="group bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 text-center">
         <div class="bg-white/20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
@@ -101,7 +107,7 @@
         <span class="inline-block mt-3 text-xs bg-white/20 px-3 py-1 rounded-full">New Feature</span>
     </a>
     
-    <!-- Analytics - Using hardcoded URL -->
+    <!-- Analytics -->
     <a href="/analytics/" 
        class="group bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 text-center">
         <div class="bg-white/20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
@@ -111,7 +117,7 @@
         <p class="text-sm text-purple-100 mt-1">View performance analytics</p>
     </a>
     
-    <!-- Term Reports - Using hardcoded URL -->
+    <!-- Term Reports -->
     <a href="/reports/term/Term%201/" 
        class="group bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 text-center">
         <div class="bg-white/20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
@@ -121,7 +127,7 @@
         <p class="text-sm text-blue-100 mt-1">View term performance</p>
     </a>
     
-    <!-- All Marks - Using hardcoded URL -->
+    <!-- All Marks -->
     <a href="/marks/" 
        class="group bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl shadow-md p-6 hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 text-center">
         <div class="bg-white/20 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
