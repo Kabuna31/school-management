@@ -1,33 +1,89 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 
+{% block extrahead %}
+<style>
+    /* Print Styles - Hidden by default, applied when printing */
+    @media print {
+        .no-print { display: none !important; }
+        .container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+        .report-header { background: none !important; border: 1px solid #ddd !important; }
+        .report-table th { background: #f1f3f5 !important; }
+        .report-footer { border-top: 2px solid #000 !important; }
+        .grade-badge { 
+            padding: 0 !important;
+            background: none !important;
+            color: #000 !important;
+            font-weight: bold !important;
+        }
+        body { background: white !important; }
+        .breadcrumbs { display: none !important; }
+        #header { display: none !important; }
+        #content { margin: 0 !important; padding: 20px !important; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container">
+    <!-- Report Header -->
     <div class="report-header">
-        <h1>{{ student.user.get_full_name }} - Report Card</h1>
-        <p><strong>Admission Number:</strong> {{ student.admission_number }}</p>
-        <p><strong>Class:</strong> {{ student.class_level.name }} {% if student.stream %}- {{ student.stream.name }}{% endif %}</p>
-        <p><strong>Term:</strong> {{ term|title }} | <strong>Exam:</strong> {{ exam|title }}</p>
+        <div class="school-info">
+            <h2>ROCKLAND SECONDARY SCHOOL</h2>
+            <p>P.O. Box 359, IGANGA, UGANDA</p>
+            <p>Tel: +256752378963 / +256779347528 / +256789149601 / +256752616306</p>
+            <p>Email: sssrockland@gmail.com | Website: www.rockland.ac.ug</p>
+            <hr>
+            <h3>ACADEMIC REPORT CARD</h3>
+        </div>
+        
+        <div class="student-info">
+            <table class="info-table">
+                <tr>
+                    <td><strong>Student Name:</strong></td>
+                    <td>{{ student.user.get_full_name }}</td>
+                    <td><strong>Admission No:</strong></td>
+                    <td>{{ student.admission_number }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Class:</strong></td>
+                    <td>{{ student.class_level.name }}</td>
+                    <td><strong>Stream:</strong></td>
+                    <td>{{ student.stream.name|default:"-" }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Term:</strong></td>
+                    <td>{{ term|title }}</td>
+                    <td><strong>Exam:</strong></td>
+                    <td>{{ exam|title }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Class Teacher:</strong></td>
+                    <td colspan="3">{{ class_teacher|default:"Not assigned" }}</td>
+                </tr>
+            </table>
+        </div>
     </div>
     
+    <!-- Report Body - Marks Table -->
     <div class="report-body">
         <table class="report-table">
             <thead>
                 <tr>
-                    <th>#</th>
-                    <th>Subject</th>
-                    <th>Mid Term</th>
-                    <th>End Term</th>
-                    <th>Total</th>
-                    <th>Grade</th>
-                    <th>Remark</th>
+                    <th width="5%">#</th>
+                    <th width="25%">Subject</th>
+                    <th width="15%">Mid Term (20%)</th>
+                    <th width="15%">End Term (80%)</th>
+                    <th width="15%">Total (100%)</th>
+                    <th width="10%">Grade</th>
+                    <th width="15%">Remark</th>
                 </tr>
             </thead>
             <tbody>
                 {% for mark in marks %}
                 <tr>
                     <td>{{ forloop.counter }}</td>
-                    <td>{{ mark.subject.name }}</td>
+                    <td><strong>{{ mark.subject.name }}</strong></td>
                     <td>{{ mark.mid_term|default:"-" }}</td>
                     <td>{{ mark.end_term|default:"-" }}</td>
                     <td><strong>{{ mark.total_score|default:"-" }}</strong></td>
@@ -40,13 +96,15 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="no-marks">No marks recorded for this student</td>
+                    <td colspan="7" class="no-marks">
+                        <i class="fas fa-info-circle"></i> No marks recorded for this student
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="4"><strong>Average Score</strong></td>
+                    <td colspan="4"><strong>SUMMARY</strong></td>
                     <td><strong>{{ average|default:"-" }}</strong></td>
                     <td><strong>{{ overall_grade|default:"-" }}</strong></td>
                     <td><strong>{{ overall_remark|default:"-" }}</strong></td>
@@ -55,47 +113,414 @@
         </table>
     </div>
     
+    <!-- Grade Legend -->
+    <div class="grade-legend">
+        <h4>Grade Scale</h4>
+        <div class="legend-items">
+            <span class="legend-item grade-a">A - Exceptional (80-100%)</span>
+            <span class="legend-item grade-b">B - Outstanding (70-79%)</span>
+            <span class="legend-item grade-c">C - Satisfactory (60-69%)</span>
+            <span class="legend-item grade-d">D - Basic (50-59%)</span>
+            <span class="legend-item grade-e">E - Elementary (0-49%)</span>
+        </div>
+    </div>
+    
+    <!-- Report Footer -->
     <div class="report-footer">
-        <div class="teacher-signature">
-            <p><strong>Class Teacher:</strong> {{ class_teacher|default:"Not assigned" }}</p>
+        <div class="signatures">
+            <div class="signature-box">
+                <p><strong>Class Teacher's Comment:</strong></p>
+                <p class="comment">{{ teacher_comment|default:"No comment" }}</p>
+                <div class="signature-line">
+                    <span>_________________</span>
+                    <span>Date: ___________</span>
+                </div>
+                <p><strong>Class Teacher:</strong> {{ class_teacher|default:"Not assigned" }}</p>
+            </div>
+            
+            <div class="signature-box">
+                <p><strong>Head Teacher's Comment:</strong></p>
+                <p class="comment">{{ head_teacher_comment|default:"No comment" }}</p>
+                <div class="signature-line">
+                    <span>_________________</span>
+                    <span>Date: ___________</span>
+                </div>
+                <p><strong>Head Teacher:</strong> {{ head_teacher|default:"Not assigned" }}</p>
+            </div>
         </div>
-        <div class="actions">
-            <a href="{% url 'report_card_list' %}?term={{ term }}&exam={{ exam }}" class="btn btn-secondary">Back to List</a>
-            <a href="{% url 'report_card_print' student.id %}?term={{ term }}&exam={{ exam }}" class="btn btn-primary" target="_blank">Print Report</a>
+        
+        <!-- Actions Buttons -->
+        <div class="actions no-print">
+            <a href="{% url 'report_card_list' %}?term={{ term }}&exam={{ exam }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to List
+            </a>
+            <a href="{% url 'report_card_print' student.id %}?term={{ term }}&exam={{ exam }}" class="btn btn-primary" target="_blank">
+                <i class="fas fa-print"></i> Print Report
+            </a>
+            <a href="{% url 'report_card_print' student.id %}?term={{ term }}&exam={{ exam }}&pdf=1" class="btn btn-success" target="_blank">
+                <i class="fas fa-file-pdf"></i> Download PDF
+            </a>
         </div>
+    </div>
+    
+    <!-- Watermark for unauthorized copies -->
+    <div class="watermark no-print">
+        <span>OFFICIAL DOCUMENT - DO NOT DUPLICATE</span>
     </div>
 </div>
 
 <style>
-.container { max-width: 1000px; margin: 0 auto; padding: 20px; }
-.report-header { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
-.report-header h1 { margin: 0 0 10px; color: #333; }
-.report-header p { margin: 5px 0; color: #555; }
-
-.report-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-.report-table th { background: #f1f3f5; padding: 12px 15px; text-align: left; border: 1px solid #dee2e6; font-weight: 600; }
-.report-table td { padding: 10px 15px; border: 1px solid #dee2e6; }
-.report-table tfoot td { font-weight: 600; background: #f8f9fa; padding: 12px 15px; }
-.no-marks { text-align: center; color: #999; padding: 30px; }
-
-.grade-badge { padding: 3px 12px; border-radius: 12px; font-weight: 600; font-size: 13px; display: inline-block; }
-.grade-a { background: #28a745; color: white; }
-.grade-b { background: #007bff; color: white; }
-.grade-c { background: #ffc107; color: #333; }
-.grade-f { background: #dc3545; color: white; }
-
-.report-footer { margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
-.actions { display: flex; gap: 10px; }
-.btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block; }
-.btn-primary { background: #007bff; color: white; }
-.btn-primary:hover { background: #0056b3; }
-.btn-secondary { background: #6c757d; color: white; }
-.btn-secondary:hover { background: #5a6268; }
-
-@media print {
-    .btn, .actions { display: none !important; }
-    .container { padding: 0; }
-    .report-header { background: none; border: 1px solid #ddd; }
-}
+    .container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 20px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    /* Report Header */
+    .report-header {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 25px;
+        border-radius: 8px;
+        margin-bottom: 30px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .school-info {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    
+    .school-info h2 {
+        margin: 0;
+        color: #1a237e;
+        font-size: 24px;
+        letter-spacing: 2px;
+    }
+    
+    .school-info p {
+        margin: 5px 0;
+        color: #555;
+        font-size: 13px;
+    }
+    
+    .school-info hr {
+        border: 0;
+        border-top: 2px solid #1a237e;
+        margin: 10px 0;
+    }
+    
+    .school-info h3 {
+        margin: 10px 0 0;
+        color: #333;
+        text-decoration: underline;
+        font-size: 18px;
+    }
+    
+    .info-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .info-table td {
+        padding: 6px 10px;
+        font-size: 14px;
+    }
+    
+    .info-table td:first-child,
+    .info-table td:nth-child(3) {
+        width: 15%;
+        font-weight: 600;
+        color: #555;
+    }
+    
+    .info-table td:nth-child(2),
+    .info-table td:nth-child(4) {
+        width: 35%;
+    }
+    
+    /* Report Table */
+    .report-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        font-size: 14px;
+    }
+    
+    .report-table th {
+        background: #1a237e;
+        color: white;
+        padding: 12px 15px;
+        text-align: left;
+        border: 1px solid #1a237e;
+        font-weight: 600;
+    }
+    
+    .report-table td {
+        padding: 10px 15px;
+        border: 1px solid #dee2e6;
+        vertical-align: middle;
+    }
+    
+    .report-table tbody tr:nth-child(even) {
+        background: #f8f9fa;
+    }
+    
+    .report-table tbody tr:hover {
+        background: #e3f2fd;
+    }
+    
+    .report-table tfoot td {
+        font-weight: 600;
+        background: #e8eaf6;
+        padding: 12px 15px;
+        border-top: 2px solid #1a237e;
+    }
+    
+    .no-marks {
+        text-align: center;
+        color: #999;
+        padding: 40px !important;
+        font-size: 16px;
+    }
+    
+    /* Grade Badges */
+    .grade-badge {
+        padding: 4px 14px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 14px;
+        display: inline-block;
+        min-width: 30px;
+        text-align: center;
+    }
+    
+    .grade-a { background: #28a745; color: white; }
+    .grade-b { background: #007bff; color: white; }
+    .grade-c { background: #ffc107; color: #333; }
+    .grade-d { background: #fd7e14; color: white; }
+    .grade-e { background: #dc3545; color: white; }
+    
+    /* Grade Legend */
+    .grade-legend {
+        margin: 20px 0;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .grade-legend h4 {
+        margin: 0 0 10px;
+        color: #333;
+        font-size: 14px;
+    }
+    
+    .legend-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    
+    .legend-item {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: white;
+    }
+    
+    .legend-item.grade-a { background: #28a745; }
+    .legend-item.grade-b { background: #007bff; }
+    .legend-item.grade-c { background: #ffc107; color: #333; }
+    .legend-item.grade-d { background: #fd7e14; }
+    .legend-item.grade-e { background: #dc3545; }
+    
+    /* Report Footer */
+    .report-footer {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 2px solid #e0e0e0;
+    }
+    
+    .signatures {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-bottom: 20px;
+    }
+    
+    .signature-box {
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .signature-box p {
+        margin: 5px 0;
+    }
+    
+    .signature-box .comment {
+        font-style: italic;
+        color: #555;
+        padding: 8px;
+        background: white;
+        border-radius: 4px;
+        min-height: 40px;
+        border-left: 3px solid #1a237e;
+    }
+    
+    .signature-line {
+        display: flex;
+        justify-content: space-between;
+        margin: 15px 0 5px;
+        font-size: 13px;
+        color: #666;
+    }
+    
+    /* Action Buttons */
+    .actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        margin-top: 15px;
+    }
+    
+    .btn {
+        padding: 10px 24px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-primary {
+        background: #007bff;
+        color: white;
+    }
+    .btn-primary:hover {
+        background: #0056b3;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,123,255,0.3);
+    }
+    
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+    .btn-secondary:hover {
+        background: #5a6268;
+        transform: translateY(-2px);
+    }
+    
+    .btn-success {
+        background: #28a745;
+        color: white;
+    }
+    .btn-success:hover {
+        background: #218838;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(40,167,69,0.3);
+    }
+    
+    /* Watermark */
+    .watermark {
+        text-align: center;
+        margin-top: 20px;
+        padding: 10px;
+        color: #999;
+        font-size: 12px;
+        letter-spacing: 2px;
+        border-top: 1px solid #eee;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .container { padding: 10px; }
+        .signatures { grid-template-columns: 1fr; gap: 15px; }
+        .info-table td { display: block; width: 100% !important; padding: 3px 5px; }
+        .info-table tr { display: block; margin-bottom: 5px; }
+        .report-table { font-size: 12px; }
+        .report-table th, .report-table td { padding: 6px 8px; }
+        .actions { justify-content: center; }
+        .btn { padding: 8px 16px; font-size: 13px; }
+        .legend-items { flex-direction: column; gap: 5px; }
+    }
+    
+    /* Print Styles */
+    @media print {
+        .no-print { display: none !important; }
+        .container {
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+        .report-header {
+            background: none !important;
+            border: 1px solid #ddd !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .report-table th {
+            background: #333 !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .report-table tbody tr:nth-child(even) {
+            background: #f5f5f5 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .grade-badge {
+            padding: 0 !important;
+            background: none !important;
+            color: #000 !important;
+            font-weight: bold !important;
+        }
+        .grade-a, .grade-b, .grade-c, .grade-d, .grade-e {
+            background: none !important;
+            color: #000 !important;
+        }
+        .report-table tfoot td {
+            background: #e8eaf6 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .signature-box {
+            background: none !important;
+            border: 1px solid #ddd !important;
+        }
+        .signature-box .comment {
+            background: none !important;
+            border-left: 3px solid #333 !important;
+        }
+        .watermark { display: none !important; }
+        .grade-legend { 
+            background: none !important;
+            border: 1px solid #ddd !important;
+        }
+        .legend-item {
+            background: none !important;
+            color: #000 !important;
+            border: 1px solid #ddd !important;
+        }
+        body { background: white !important; }
+        .breadcrumbs { display: none !important; }
+        #header { display: none !important; }
+        #content { margin: 0 !important; padding: 20px !important; }
+    }
 </style>
 {% endblock %}

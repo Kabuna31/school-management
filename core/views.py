@@ -969,7 +969,7 @@ class ReportCardListView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
             cards = cards.filter(class_level_id=class_id)
 
         # Pagination
-        paginator = Paginator(cards, 20)  # 20 report cards per page
+        paginator = Paginator(cards, 20)
         page = self.request.GET.get('page')
 
         try:
@@ -994,6 +994,12 @@ class ReportCardListView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixi
         ctx["streams"] = Stream.objects.filter(school=school)
         ctx["selected_term"] = term
         ctx["selected_class"] = class_id
+        
+        # Add stats for the dashboard
+        ctx["total_students"] = StudentProfile.objects.filter(school=school).count()
+        ctx["total_subjects"] = Subject.objects.filter(school=school).count()
+        ctx["avg_score"] = mark_average(Mark.objects.filter(school=school))
+        
         return ctx
 
 
@@ -1028,7 +1034,7 @@ class GenerateReportCardsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScope
         students = StudentProfile.objects.filter(school=school, class_level=class_level)
 
         generated = 0
-        results = []  # (card, aggregate_score) for ranking
+        results = []
 
         for student in students:
             marks = Mark.objects.filter(school=school, student=student, term=term).select_related("subject")
@@ -1064,7 +1070,7 @@ class GenerateReportCardsView(LoginRequiredMixin, RoleRequiredMixin, SchoolScope
             results.append((card, card.aggregate_score or 0))
             generated += 1
 
-        # Rank by aggregate score within the class/term for class_position
+        # Rank by aggregate score
         results.sort(key=lambda pair: pair[1], reverse=True)
         total = len(results)
         for position, (card, _score) in enumerate(results, start=1):
@@ -1204,7 +1210,7 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
             subject_count += 1
             
             # Get grade for this subject
-            grade = entry.grade  # This uses the @property from your model
+            grade = entry.grade
             
             subjects.append({
                 'name': entry.subject.name,
@@ -1212,8 +1218,8 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
                 'eot': entry.end_term if entry.end_term is not None else '-',
                 'total': entry_total,
                 'grade': grade,
-                'loa': self._get_loa(grade),  # Level of Achievement
-                'tr': '-',  # Teacher Remark (you can add this field)
+                'loa': self._get_loa(grade),
+                'tr': '-',
             })
         
         # Calculate overall average
@@ -1244,9 +1250,9 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
         ctx["subjects"] = subjects
         ctx["total_score"] = total_score
         ctx["term"] = term_display
-        ctx["year"] = '2026'  # You can make this dynamic
-        ctx["term_end_date"] = '21ST - AUG - 2026'  # You can make this dynamic
-        ctx["next_term_start"] = '2ND - SEP - 2026'  # You can make this dynamic
+        ctx["year"] = '2026'
+        ctx["term_end_date"] = '21ST - AUG - 2026'
+        ctx["next_term_start"] = '2ND - SEP - 2026'
         
         return ctx
     
@@ -1287,6 +1293,7 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
         else:
             return 'Needs improvement. Please work harder.'
 
+
 class ReportCardDeleteView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
     required_roles = MARK_MANAGE_ROLES
 
@@ -1302,6 +1309,44 @@ class ReportCardDeleteView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMi
         card.delete()
         messages.success(request, f"Report card for {student_name} - {term} deleted successfully!")
         return redirect("core:report_card_list")
+
+
+class ReportCardPrintAllView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, TemplateView):
+    """
+    Print all report cards for a class and term
+    """
+    template_name = "core/reports/report_card_print_all.html"
+    required_roles = ['system_admin', 'school_admin', 'headteacher', 'dos']
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        school = self.get_school()
+        
+        # Get filters from request
+        class_id = self.request.GET.get('class')
+        term = self.request.GET.get('term')
+        
+        # Get report cards
+        cards = ReportCard.objects.filter(school=school)
+        if class_id:
+            cards = cards.filter(class_level_id=class_id)
+        if term:
+            cards = cards.filter(term=term)
+        
+        cards = cards.select_related('student', 'student__user', 'class_level', 'stream')
+        
+        ctx['cards'] = cards
+        ctx['class_id'] = class_id
+        ctx['term'] = term
+        
+        # Get class name
+        if class_id:
+            class_level = get_object_or_404(ClassLevel, pk=class_id, school=school)
+            ctx['class_name'] = class_level.name
+        else:
+            ctx['class_name'] = 'All Classes'
+        
+        return ctx
 
 
 # ============================================================
