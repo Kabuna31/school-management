@@ -343,13 +343,73 @@ class ReportCard(models.Model):
             return 0
         return round(sum(e.total for e in entries) / len(entries), 1)
 
+    @property
+    def average_score_grade(self):
+        """Get letter grade for the average score"""
+        score = self.average_score
+        if score >= 80:
+            return 'A'
+        elif score >= 70:
+            return 'B'
+        elif score >= 60:
+            return 'C'
+        elif score >= 50:
+            return 'D'
+        else:
+            return 'E'
+
+    @property
+    def general_comment(self):
+        """Auto-generate general comment based on average score"""
+        score = self.average_score
+        if score >= 80:
+            return 'Excellent performance. Keep up the good work!'
+        elif score >= 70:
+            return 'Very good performance. Continue striving for excellence.'
+        elif score >= 60:
+            return 'Good performance. Room for improvement.'
+        elif score >= 50:
+            return 'Average performance. More effort needed.'
+        else:
+            return 'Needs improvement. Please work harder.'
+
+    @property
+    def subject_count(self):
+        """Get total number of subjects"""
+        return self.entries.count()
+
+    def get_performance_summary(self):
+        """Get performance summary with grade distribution"""
+        entries = self.entries.all()
+        if not entries:
+            return {'A': 0, 'B': 0, 'C': 0, 'D': 0, 'E': 0}
+        
+        summary = {'A': 0, 'B': 0, 'C': 0, 'D': 0, 'E': 0}
+        for entry in entries:
+            grade = entry.grade
+            if grade in summary:
+                summary[grade] += 1
+        return summary
+
 
 class ReportCardEntry(models.Model):
     """One subject row on a report card."""
     report_card = models.ForeignKey(ReportCard, on_delete=models.CASCADE, related_name='entries')
     subject     = models.ForeignKey(Subject, on_delete=models.CASCADE)
-    mid_term    = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    end_term    = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    mid_term    = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(20)]
+    )
+    end_term    = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(80)]
+    )
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = ('report_card', 'subject')
