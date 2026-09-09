@@ -1209,6 +1209,209 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
     template_name = "core/reports/report_card_print.html"
     required_roles = REPORT_CARD_VIEW_ROLES
 
+    def get(self, request, *args, **kwargs):
+        """Override get to handle PDF generation"""
+        # If PDF is requested, render PDF
+        if request.GET.get('pdf') == '1':
+            return self.render_to_pdf(request, *args, **kwargs)
+        return super().get(request, *args, **kwargs)
+
+    def render_to_pdf(self, request, *args, **kwargs):
+        """Render the report card as PDF using weasyprint"""
+        try:
+            from weasyprint import HTML, CSS
+            from weasyprint.text.fonts import FontConfiguration
+            from django.template.loader import render_to_string
+            from django.http import HttpResponse
+            
+            # Get context data
+            context = self.get_context_data(**kwargs)
+            
+            # Render HTML template
+            html_string = render_to_string(self.template_name, context, request)
+            
+            # Configure fonts
+            font_config = FontConfiguration()
+            
+            # Create PDF with proper styling
+            html = HTML(string=html_string)
+            css = CSS(string='''
+                @page {
+                    size: A4;
+                    margin: 1.5cm;
+                }
+                @page {
+                    @bottom-center {
+                        content: "Page " counter(page) " of " counter(pages);
+                        font-size: 10px;
+                        color: #666;
+                    }
+                }
+                body {
+                    font-family: 'Times New Roman', Times, serif;
+                    font-size: 12px;
+                    line-height: 1.5;
+                }
+                .report-card {
+                    width: 100%;
+                    max-width: 210mm;
+                    margin: 0 auto;
+                    padding: 10px;
+                }
+                .header-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 15px;
+                }
+                .school-info {
+                    text-align: center;
+                }
+                .school-info h1 {
+                    margin: 0;
+                    font-size: 20px;
+                    text-transform: uppercase;
+                    color: #000;
+                    font-weight: bold;
+                    letter-spacing: 2px;
+                }
+                .school-info p {
+                    margin: 2px 0;
+                    font-size: 11px;
+                }
+                .report-title {
+                    text-align: center;
+                    font-weight: bold;
+                    text-decoration: underline;
+                    margin: 8px 0;
+                    font-size: 15px;
+                }
+                .main-container {
+                    width: 100%;
+                    display: flex;
+                    margin-top: 10px;
+                    gap: 10px;
+                }
+                .left-column {
+                    width: 40%;
+                    padding-right: 10px;
+                }
+                .right-column {
+                    width: 60%;
+                }
+                .student-info {
+                    font-size: 11px;
+                    line-height: 1.8;
+                }
+                .info-line {
+                    margin-bottom: 3px;
+                    padding: 2px 0;
+                    border-bottom: 1px dashed #ddd;
+                }
+                .label {
+                    font-weight: bold;
+                }
+                .grade-summary {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 12px;
+                    margin-bottom: 12px;
+                    font-size: 9px;
+                }
+                .grade-summary th, .grade-summary td {
+                    border: 1px solid #000;
+                    padding: 3px 2px;
+                    text-align: center;
+                }
+                .grade-summary th {
+                    background: #e8e8e8;
+                    font-weight: bold;
+                }
+                .marks-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 10px;
+                }
+                .marks-table th, .marks-table td {
+                    border: 1px solid #000;
+                    padding: 3px 2px;
+                    text-align: center;
+                }
+                .marks-table th {
+                    background: #e8e8e8;
+                    font-weight: bold;
+                    font-size: 9px;
+                }
+                .subject-name {
+                    text-align: left;
+                    font-weight: bold;
+                    padding-left: 5px;
+                }
+                .marks-table .total-row td {
+                    font-weight: bold;
+                    background: #e8e8e8;
+                    border-top: 2px solid #000;
+                }
+                .footer-info {
+                    font-size: 10px;
+                    margin-top: 12px;
+                }
+                .signature-container {
+                    text-align: center;
+                    margin-top: 12px;
+                }
+                .stamp-box {
+                    border-top: 1px solid #000;
+                    padding-top: 6px;
+                    font-weight: bold;
+                    font-size: 11px;
+                    text-align: center;
+                    margin-top: 8px;
+                    width: 60%;
+                    margin-left: auto;
+                    margin-right: auto;
+                }
+                .invalid-notice {
+                    font-size: 9px;
+                    color: #cc0000;
+                    margin-top: 12px;
+                    text-align: center;
+                    font-weight: bold;
+                    border-top: 1px solid #cc0000;
+                    padding-top: 8px;
+                }
+                .grade-badge {
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                    font-weight: 600;
+                    font-size: 11px;
+                    display: inline-block;
+                    min-width: 28px;
+                    text-align: center;
+                }
+                .grade-a { background: #28a745; color: white; }
+                .grade-b { background: #007bff; color: white; }
+                .grade-c { background: #ffc107; color: #333; }
+                .grade-d { background: #fd7e14; color: white; }
+                .grade-e { background: #dc3545; color: white; }
+                .no-print { display: none !important; }
+            ''')
+            
+            pdf = html.write_pdf(font_config=font_config, stylesheets=[css])
+            
+            # Create response
+            response = HttpResponse(pdf, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="report_card_{context["student_name"]}_Term_{context["term"]}.pdf"'
+            return response
+            
+        except ImportError as e:
+            # If weasyprint is not installed, return HTML version
+            print(f"WeasyPrint not installed: {e}")
+            return super().get(request, *args, **kwargs)
+        except Exception as e:
+            # If any error occurs, return HTML version
+            print(f"PDF generation error: {e}")
+            return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         school = self.get_school()
@@ -1271,12 +1474,6 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
         average_score = total_score / subject_count if subject_count > 0 else 0
         general_grade = self._get_grade_letter(average_score)
         
-        # Get student gender (you may need to add this field to User or StudentProfile)
-        gender = 'M'  # Default, you can add a gender field
-        
-        # Get class teacher (you may need to add this relationship)
-        class_teacher = 'Mr./Ms. Teacher'  # You can fetch this from ClassLevel model
-        
         # Get term display
         term_display = card.term.replace('Term ', '') if card.term else 'TWO'
         
@@ -1286,8 +1483,8 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
         ctx["student_name"] = card.student.user.get_full_name() or card.student.user.username
         ctx["class_name"] = card.class_level.name if card.class_level else 'N/A'
         ctx["stream"] = card.stream.name if card.stream else 'N/A'
-        ctx["gender"] = gender
-        ctx["class_teacher"] = class_teacher
+        ctx["gender"] = 'M'  # You can add gender field
+        ctx["class_teacher"] = 'Mr./Ms. Teacher'
         ctx["teacher_comment"] = card.teacher_comment or 'No comment'
         ctx["general_grade"] = general_grade
         ctx["general_comment"] = self._get_general_comment(average_score)
@@ -1302,7 +1499,6 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
         return ctx
     
     def _get_grade_letter(self, score):
-        """Convert score to grade letter"""
         if score >= 80:
             return 'A'
         elif score >= 70:
@@ -1315,7 +1511,6 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
             return 'E'
     
     def _get_loa(self, grade):
-        """Get Level of Achievement based on grade"""
         loa_map = {
             'A': 'Exceptional',
             'B': 'Outstanding',
@@ -1326,7 +1521,6 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
         return loa_map.get(grade, '-')
     
     def _get_general_comment(self, score):
-        """Get general comment based on score"""
         if score >= 80:
             return 'Excellent performance. Keep up the good work!'
         elif score >= 70:
@@ -1337,7 +1531,6 @@ class ReportCardPrintView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMix
             return 'Average performance. More effort needed.'
         else:
             return 'Needs improvement. Please work harder.'
-
 
 class ReportCardDeleteView(LoginRequiredMixin, RoleRequiredMixin, SchoolScopedMixin, View):
     required_roles = MARK_MANAGE_ROLES
